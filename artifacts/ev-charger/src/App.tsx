@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, createContext, useContext } from 'react';
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
@@ -11,6 +11,10 @@ import NotFound from '@/pages/not-found';
 import Home from '@/pages/Home';
 import Dashboard from '@/pages/Dashboard';
 import MySpot from '@/pages/MySpot';
+
+const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN as string | undefined;
+
+const DomainBlockedContext = createContext(false);
 
 const clerkPubKey = publishableKeyFromHost(
   window.location.hostname,
@@ -77,9 +81,36 @@ const clerkAppearance = {
   },
 };
 
+/** Watches for 403 API errors and signs the user out, setting the blocked flag. */
+function DomainGuard({ onBlocked }: { onBlocked: () => void }) {
+  const { signOut } = useClerk();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    return qc.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' && event.query.state.status === 'error') {
+        const err = event.query.state.error as { status?: number } | null;
+        if (err?.status === 403) {
+          signOut();
+          onBlocked();
+        }
+      }
+    });
+  }, [qc, signOut, onBlocked]);
+
+  return null;
+}
+
 function SignInPage() {
+  const domainBlocked = useContext(DomainBlockedContext);
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-4">
+      {domainBlocked && allowedDomain && (
+        <div className="w-full max-w-[440px] rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          Access is restricted to <strong>@{allowedDomain}</strong> accounts.
+          Please sign in with your company email.
+        </div>
+      )}
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
     </div>
   );
@@ -140,6 +171,7 @@ function ClerkQueryClientCacheInvalidator() {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  const [domainBlocked, setDomainBlocked] = useState(false);
 
   return (
     <ClerkProvider
@@ -158,7 +190,9 @@ function ClerkProviderWithRoutes() {
         signUp: {
           start: {
             title: 'Join ChargeQ',
-            subtitle: 'Create an account to access the EV charger waitlist',
+            subtitle: allowedDomain
+              ? `Sign up with your @${allowedDomain} company email`
+              : 'Create an account to access the EV charger waitlist',
           },
         },
       }}
@@ -167,15 +201,18 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <ClerkQueryClientCacheInvalidator />
-          <Switch>
-            <Route path="/" component={HomeRedirect} />
-            <Route path="/my-spot" component={MySpotRoute} />
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
-            <Route component={NotFound} />
-          </Switch>
-          <Toaster />
+          <DomainBlockedContext.Provider value={domainBlocked}>
+            <ClerkQueryClientCacheInvalidator />
+            <DomainGuard onBlocked={() => setDomainBlocked(true)} />
+            <Switch>
+              <Route path="/" component={HomeRedirect} />
+              <Route path="/my-spot" component={MySpotRoute} />
+              <Route path="/sign-in/*?" component={SignInPage} />
+              <Route path="/sign-up/*?" component={SignUpPage} />
+              <Route component={NotFound} />
+            </Switch>
+            <Toaster />
+          </DomainBlockedContext.Provider>
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>
