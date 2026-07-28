@@ -111,8 +111,24 @@ export async function runExpiryCheck(): Promise<void> {
     await processQueue();
   }
 
-  // End-of-day: expire checked_in/claimed sessions if past 11:55 PM
-  if (now.getHours() === 23 && now.getMinutes() >= 55) {
+  // End-of-day: expire active sessions and clear waiting queue at 11:55 PM Eastern.
+  // Compute Eastern hour without relying on ICU (same DST logic as email.ts).
+  const getNthSundayUTC = (year: number, month: number, n: number): Date => {
+    const d = new Date(Date.UTC(year, month, 1));
+    d.setUTCDate(1 + ((7 - d.getUTCDay()) % 7) + (n - 1) * 7);
+    return d;
+  };
+  const yr = now.getUTCFullYear();
+  const dstStart = getNthSundayUTC(yr, 2, 2);
+  dstStart.setUTCHours(7); // 2 AM EST = 7 AM UTC
+  const dstEnd = getNthSundayUTC(yr, 10, 1);
+  dstEnd.setUTCHours(6); // 2 AM EDT = 6 AM UTC
+  const isDST = now >= dstStart && now < dstEnd;
+  const easternHour = (now.getUTCHours() - (isDST ? 4 : 5) + 24) % 24;
+  const easternMinute = now.getUTCMinutes();
+
+  if (easternHour === 23 && easternMinute >= 55) {
+    // Expire active sessions
     const staleSessions = await db
       .select()
       .from(chargingSessionsTable)
@@ -130,7 +146,21 @@ export async function runExpiryCheck(): Promise<void> {
         .where(inArray(chargersTable.id, staleSessions.map((s) => s.chargerId)));
 
       logger.info({ count: staleSessions.length }, "End-of-day session expiry");
-      await processQueue();
+    }
+
+    // Cancel any remaining waiting queue entries so they don't carry over
+    const waitingEntries = await db
+      .select()
+      .from(queueEntriesTable)
+      .where(eq(queueEntriesTable.status, "waiting"));
+
+    if (waitingEntries.length > 0) {
+      await db
+        .update(queueEntriesTable)
+        .set({ status: "cancelled" })
+        .where(inArray(queueEntriesTable.id, waitingEntries.map((e) => e.id)));
+
+      logger.info({ count: waitingEntries.length }, "End-of-day queue clear");
     }
   }
 }
