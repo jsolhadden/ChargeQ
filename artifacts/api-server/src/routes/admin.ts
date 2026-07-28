@@ -13,12 +13,91 @@ import {
 import { requireAdmin } from "../middlewares/requireAdmin";
 import type { AuthRequest } from "../middlewares/requireAuth";
 import { processQueue } from "../lib/queue";
+import { clerkClient } from "@clerk/express";
 
 const router: IRouter = Router();
 
 // GET /admin/me — returns 200 if the caller is an admin, 403 otherwise
 router.get("/admin/me", requireAdmin, (_req, res): void => {
   res.json({ isAdmin: true });
+});
+
+// GET /admin/users — list Clerk users for the assign dialog
+router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
+  const { data: users } = await clerkClient.users.getUserList({ limit: 100 });
+  const result = users.map((u) => ({
+    id: u.id,
+    name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.emailAddresses[0]?.emailAddress || "Unknown",
+    email: u.emailAddresses[0]?.emailAddress ?? "",
+  }));
+  res.json(result);
+});
+
+// POST /admin/chargers/:chargerId/assign — place someone directly onto a charger
+router.post("/admin/chargers/:chargerId/assign", requireAdmin, async (req: AuthRequest, res): Promise<void> => {
+  const chargerId = parseInt(
+    Array.isArray(req.params.chargerId) ? req.params.chargerId[0] : req.params.chargerId,
+    10,
+  );
+  if (isNaN(chargerId)) {
+    res.status(400).json({ error: "Invalid chargerId" });
+    return;
+  }
+
+  const { userId, userName } = req.body as { userId?: string; userName?: string };
+  if (!userName?.trim()) {
+    res.status(400).json({ error: "userName is required" });
+    return;
+  }
+
+  const now = new Date();
+
+  // Atomic: attempt to flip the charger from available → occupied in a single
+  // conditional UPDATE. If no row is affected, the charger is already taken.
+  const updated = await db
+    .update(chargersTable)
+    .set({ status: "occupied" })
+    .where(and(eq(chargersTable.id, chargerId), eq(chargersTable.status, "available")))
+    .returning();
+
+  if (updated.length === 0) {
+    // Either charger doesn't exist or is not available — distinguish for a useful message
+    const [charger] = await db.select().from(chargersTable).where(eq(chargersTable.id, chargerId)).limit(1);
+    if (!charger) {
+      res.status(404).json({ error: "Charger not found" });
+    } else {
+      res.status(409).json({ error: "Charger is not available" });
+    }
+    return;
+  }
+
+  const charger = updated[0];
+
+  // Create a checked-in session immediately (admin places person directly; no claim step)
+  const [session] = await db
+    .insert(chargingSessionsTable)
+    .values({
+      userId: userId ?? `generic-${Date.now()}`,
+      userName: userName.trim(),
+      chargerId: charger.id,
+      chargerName: charger.name,
+      status: "checked_in",
+      claimDeadlineAt: now, // not meaningful for checked_in; satisfies NOT NULL constraint
+      claimedAt: now,
+      checkedInAt: now,
+    })
+    .returning();
+
+  // If this is a registered user, cancel any open waiting queue entry so they
+  // aren't later re-assigned by processQueue while already on a charger.
+  if (userId) {
+    await db
+      .update(queueEntriesTable)
+      .set({ status: "cancelled" })
+      .where(and(eq(queueEntriesTable.userId, userId), eq(queueEntriesTable.status, "waiting")));
+  }
+
+  res.json({ success: true, sessionId: session.id });
 });
 
 // GET /admin/chargers — all chargers with full session info

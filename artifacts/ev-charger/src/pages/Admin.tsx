@@ -36,7 +36,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, LogOut, RefreshCw, Unlock, UserX, ShieldCheck } from 'lucide-react';
+import { AssignChargerDialog } from '@/components/AssignChargerDialog';
+import { Zap, LogOut, RefreshCw, Unlock, UserX, ShieldCheck, UserPlus } from 'lucide-react';
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -76,6 +77,7 @@ export default function Admin() {
   const { toast } = useToast();
   const [releasingId, setReleasingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [assigningCharger, setAssigningCharger] = useState<{ id: number; name: string } | null>(null);
 
   const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
   const adminReady = isLoaded && !isAdminLoading;
@@ -278,6 +280,18 @@ export default function Admin() {
                         {charger.currentSessionId ? `#${charger.currentSessionId}` : '—'}
                       </TableCell>
                       <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                        {charger.status === 'available' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                            onClick={() => setAssigningCharger({ id: charger.id, name: charger.name })}
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            Assign
+                          </Button>
+                        )}
                         {charger.status !== 'available' && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -315,6 +329,7 @@ export default function Admin() {
                             </AlertDialogContent>
                           </AlertDialog>
                         )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -464,6 +479,16 @@ export default function Admin() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Assign occupant dialog */}
+      {assigningCharger && (
+        <AssignChargerDialog
+          open={true}
+          onOpenChange={(open) => { if (!open) setAssigningCharger(null); }}
+          chargerId={assigningCharger.id}
+          chargerName={assigningCharger.name}
+        />
+      )}
     </div>
   );
 }
