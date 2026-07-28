@@ -26,12 +26,13 @@ export const requireAuth = async (
   if (ALLOWED_DOMAIN) {
     try {
       const user = await clerkClient.users.getUser(userId);
+      const isAdmin = (user.publicMetadata as Record<string, unknown>)?.role === "admin";
       const primaryEmail = (
         user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId) ??
         user.emailAddresses[0]
       )?.emailAddress ?? "";
 
-      if (!primaryEmail.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)) {
+      if (!isAdmin && !primaryEmail.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)) {
         res
           .status(403)
           .json({ error: `Access restricted to @${ALLOWED_DOMAIN} accounts` });
