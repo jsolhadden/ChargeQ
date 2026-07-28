@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/requireAuth";
 import { processQueue } from "../lib/queue";
-import { getAuth } from "@clerk/express";
+import { getAuth, clerkClient } from "@clerk/express";
 
 const router: IRouter = Router();
 
@@ -145,17 +145,28 @@ router.get("/queue/me", requireAuth, async (req: AuthRequest, res): Promise<void
 router.post("/queue", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const userId = req.userId!;
 
-  // Get user details from Clerk
+  // Get user details from Clerk — prefer session claims (fast), fall back to
+  // the Clerk API when the email claim is absent (e.g. production tokens).
   let userName = "Employee";
   let userEmail = "";
   try {
     const auth = getAuth(req);
-    // Use auth session claims or fallback
     const firstName = (auth as any)?.sessionClaims?.given_name ?? "";
     const lastName = (auth as any)?.sessionClaims?.family_name ?? "";
-    const email = (auth as any)?.sessionClaims?.email ?? "";
+    const emailFromClaim = (auth as any)?.sessionClaims?.email ?? "";
     userName = [firstName, lastName].filter(Boolean).join(" ") || "Employee";
-    userEmail = email;
+    userEmail = emailFromClaim;
+
+    // If session claims didn't carry the email, fetch it from the Clerk API
+    if (!userEmail) {
+      const clerkUser = await clerkClient.users.getUser(userId);
+      userEmail = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+      if (!userName || userName === "Employee") {
+        userName =
+          [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+          "Employee";
+      }
+    }
   } catch {
     // fallback values are fine
   }
