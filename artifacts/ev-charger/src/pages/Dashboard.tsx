@@ -153,7 +153,7 @@ export default function Dashboard() {
   // Redirect to /my-spot if user has an active session
   // Note: 'claimed' DB status is returned as state 'assigned' by the API,
   // so this redirect covers assigned, claimed, and checked_in sessions.
-  if (myStatus?.state === 'assigned' || myStatus?.state === 'checked_in') {
+  if (myStatus?.state === 'assigned') {
     return <Redirect to="/my-spot" />;
   }
 
