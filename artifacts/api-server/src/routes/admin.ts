@@ -16,6 +16,11 @@ import { processQueue } from "../lib/queue";
 
 const router: IRouter = Router();
 
+// GET /admin/me — returns 200 if the caller is an admin, 403 otherwise
+router.get("/admin/me", requireAdmin, (_req, res): void => {
+  res.json({ isAdmin: true });
+});
+
 // GET /admin/chargers — all chargers with full session info
 router.get("/admin/chargers", requireAdmin, async (req: AuthRequest, res): Promise<void> => {
   const chargers = await db.select().from(chargersTable).orderBy(chargersTable.id);

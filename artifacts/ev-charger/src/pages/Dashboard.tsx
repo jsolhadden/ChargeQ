@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { Show, useClerk, useUser } from '@clerk/react';
+import { useIsAdmin } from '@/hooks/use-is-admin';
 import { LogOut, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
 import {
   useListChargers,
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const { signOut } = useClerk();
   const { user } = useUser();
+  const { isAdmin } = useIsAdmin();
   const [takingChargerId, setTakingChargerId] = useState<number | null>(null);
 
   const { data: chargers, isLoading: chargersLoading } = useListChargers({
@@ -187,7 +189,7 @@ export default function Dashboard() {
 
           <Show when="signed-in">
             {/* Admin link — only visible to admin users */}
-            {user?.publicMetadata?.role === 'admin' && (
+            {isAdmin && (
               <Link href="/admin">
                 <Button size="sm" variant="outline" className="gap-1.5 mr-2 text-primary border-primary/30 hover:bg-primary/10">
                   <ShieldCheck className="w-3.5 h-3.5" />

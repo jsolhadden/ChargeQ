@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useUser, useClerk } from '@clerk/react';
+import { useIsAdmin } from '@/hooks/use-is-admin';
 import { Redirect, Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -76,7 +77,8 @@ export default function Admin() {
   const [releasingId, setReleasingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
 
-  const isAdmin = isLoaded && user?.publicMetadata?.role === 'admin';
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
+  const adminReady = isLoaded && !isAdminLoading;
 
   const { data: chargers, isLoading: chargersLoading, refetch: refetchChargers } = useAdminListChargers({
     query: { queryKey: getAdminListChargersQueryKey(), refetchInterval: 10000, enabled: isAdmin },
@@ -133,8 +135,8 @@ export default function Admin() {
     refetchSessions();
   };
 
-  // Wait for Clerk to load
-  if (!isLoaded) {
+  // Wait for Clerk + admin check to load
+  if (!adminReady) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-background">
         <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
