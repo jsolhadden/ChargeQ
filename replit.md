@@ -1,36 +1,55 @@
-# [Project name]
+# ChargeQ — Office EV Charger Waitlist
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A real-time web app for managing a shared office EV charging queue. Employees join a FIFO waitlist, get auto-assigned to one of 2 chargers when available, and have 60 minutes to claim their spot before it passes to the next person.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/ev-charger run dev` — run the frontend (port 24813)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- Optional env: `RESEND_API_KEY` — Resend API key for assignment email notifications
+- Auth env (auto-provisioned): `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- Frontend: React + Vite, Tailwind v4, Clerk auth, React Query, Wouter, Framer Motion
+- API: Express 5 + Clerk Express middleware
 - DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
+- Auth: Clerk (Replit-managed)
+- Email: Resend (optional)
+- Validation: Zod (v4 compat), drizzle-zod
 - API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — API contract (source of truth)
+- `lib/db/src/schema/` — DB tables: chargers, queue_entries, charging_sessions
+- `artifacts/api-server/src/routes/` — Express route handlers
+- `artifacts/api-server/src/lib/queue.ts` — Queue assignment logic + background expiry jobs
+- `artifacts/api-server/src/lib/email.ts` — Resend email notification
+- `artifacts/ev-charger/src/` — React frontend (App.tsx, pages/, components/)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Orval v8 generates Zod v4 syntax (`z.int()`); the codegen script patches the import to `zod/v4` after generation via sed in `lib/api-spec/package.json`
+- Auth is cookie-based on web (no Bearer tokens); Clerk session cookies are auto-attached to same-origin API calls
+- Background jobs (claim expiry check every 2 min, end-of-day session expiry at 11:55 PM) run in the API server process via `setInterval`
+- Queue assignment (`processQueue`) runs immediately on join and after any checkout/forfeit
+- Chargers table is seeded with 2 rows (Charger A, Charger B) — the only seed data needed
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Employees sign in with email/password (Clerk)
+- Dashboard shows live charger status + full queue with positions
+- One-tap join / leave queue; auto-assigned when a charger frees up
+- 60-minute claim countdown on My Spot page; auto-forfeit if unclaimed
+- Check-in (parked + plugged in) and check-out (frees charger, triggers next assignment)
+- End-of-day auto-expiry for forgotten sessions
 
 ## User preferences
 
@@ -38,8 +57,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Always run `pnpm --filter @workspace/api-spec run codegen` after changing `lib/api-spec/openapi.yaml`
+- After changing any `lib/*` package, run `pnpm run typecheck:libs` before checking artifact packages
+- The codegen sed patch runs automatically as part of the codegen script — don't remove it
+- Clerk dev keys show a console warning during development — this is expected and harmless

@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startBackgroundJobs, seedChargers } from "./lib/queue";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,9 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Ensure baseline chargers exist on every startup
+  seedChargers().catch((e) => logger.error({ err: e }, "Failed to seed chargers"));
+
+  startBackgroundJobs();
 });

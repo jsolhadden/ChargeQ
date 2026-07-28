@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "EV Charger Waitlist"
+version = "1.0.0"
+id = "artifacts/ev-charger"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24813
+
+[services.development]
+run = "pnpm --filter @workspace/ev-charger run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ev-charger", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ev-charger/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24813"
+BASE_PATH = "/"

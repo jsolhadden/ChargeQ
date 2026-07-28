@@ -3,20 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: EV Charger Waitlist API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: chargers
+    description: Charger operations
+  - name: queue
+    description: Queue operations
+  - name: sessions
+    description: Charging session operations
+  - name: dashboard
+    description: Dashboard operations
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,192 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /chargers:
+    get:
+      operationId: listChargers
+      tags: [chargers]
+      summary: List all chargers with current status
+      responses:
+        "200":
+          description: List of chargers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Charger"
+
+  /queue:
+    get:
+      operationId: listQueue
+      tags: [queue]
+      summary: List all active queue entries with positions
+      responses:
+        "200":
+          description: Queue entries in order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QueueEntry"
+    post:
+      operationId: joinQueue
+      tags: [queue]
+      summary: Join the waitlist queue
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinQueueInput"
+      responses:
+        "201":
+          description: Queue entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueEntry"
+        "400":
+          description: Already in queue or charger available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /queue/me:
+    get:
+      operationId: getMyQueueEntry
+      tags: [queue]
+      summary: Get current user's queue entry or active session
+      responses:
+        "200":
+          description: Current user's queue status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyStatus"
+        "404":
+          description: Not in queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /queue/{entryId}:
+    delete:
+      operationId: leaveQueue
+      tags: [queue]
+      summary: Leave the queue (cancel waitlist entry)
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Left queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /sessions/{sessionId}/claim:
+    post:
+      operationId: claimSession
+      tags: [sessions]
+      summary: Claim an assigned charger slot (within 60-minute window)
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargingSession"
+        "400":
+          description: Claim window expired or already claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /sessions/{sessionId}/checkin:
+    post:
+      operationId: checkInSession
+      tags: [sessions]
+      summary: Check in — mark charger as occupied once parked and plugged in
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Checked in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargingSession"
+        "400":
+          description: Not in claimable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /sessions/{sessionId}/checkout:
+    post:
+      operationId: checkOutSession
+      tags: [sessions]
+      summary: Check out — free the charger and trigger next assignment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Checked out and charger freed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargingSession"
+        "400":
+          description: Not checked in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get a real-time summary of charger and queue state
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +228,133 @@ components:
       required:
         - status
 
+    Charger:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum: [available, assigned, occupied]
+        currentSessionId:
+          type: ["integer", "null"]
+        currentUserId:
+          type: ["string", "null"]
+        currentUserName:
+          type: ["string", "null"]
+
+    QueueEntry:
+      type: object
+      required: [id, userId, userName, userEmail, position, joinedAt, status]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        position:
+          type: integer
+        joinedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [waiting, assigned, cancelled, forfeited]
+        sessionId:
+          type: ["integer", "null"]
+        estimatedWaitMinutes:
+          type: ["integer", "null"]
+
+    JoinQueueInput:
+      type: object
+      properties:
+        note:
+          type: string
+
+    MyStatus:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [not_in_queue, waiting, assigned, checked_in, checked_out]
+        queueEntry:
+          $ref: "#/components/schemas/QueueEntry"
+        session:
+          $ref: "#/components/schemas/ChargingSession"
+
+    ChargingSession:
+      type: object
+      required: [id, userId, chargerId, chargerName, status, assignedAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userName:
+          type: string
+        chargerId:
+          type: integer
+        chargerName:
+          type: string
+        status:
+          type: string
+          enum: [assigned, claimed, checked_in, checked_out, forfeited, expired]
+        assignedAt:
+          type: string
+          format: date-time
+        claimDeadlineAt:
+          type: string
+          format: date-time
+        claimedAt:
+          type: ["string", "null"]
+          format: date-time
+        checkedInAt:
+          type: ["string", "null"]
+          format: date-time
+        checkedOutAt:
+          type: ["string", "null"]
+          format: date-time
+        minutesRemainingToClaim:
+          type: ["integer", "null"]
+
+    DashboardSummary:
+      type: object
+      required: [totalChargers, availableChargers, occupiedChargers, assignedChargers, queueLength, averageWaitMinutes, todayCompletedSessions]
+      properties:
+        totalChargers:
+          type: integer
+        availableChargers:
+          type: integer
+        occupiedChargers:
+          type: integer
+        assignedChargers:
+          type: integer
+        queueLength:
+          type: integer
+        averageWaitMinutes:
+          type: integer
+        todayCompletedSessions:
+          type: integer
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
