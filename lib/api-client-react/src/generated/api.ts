@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminCharger,
+  AdminQueueEntry,
+  AdminSession,
   ApiError,
   Charger,
   ChargingSession,
@@ -792,6 +795,379 @@ export const useCheckOutSession = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getCheckOutSessionMutationOptions(options));
     }
+
+export const getAdminListChargersUrl = () => {
+
+
+
+
+  return `/api/admin/chargers`
+}
+
+/**
+ * @summary List all chargers with full session details (admin)
+ */
+export const adminListChargers = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminCharger[]> => {
+
+  return customFetch<AdminCharger[]>(getAdminListChargersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminListChargersQueryKey = () => {
+    return [
+    `/api/admin/chargers`
+    ] as const;
+    }
+
+
+export const getAdminListChargersQueryOptions = <TData = Awaited<ReturnType<typeof adminListChargers>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChargers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminListChargersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminListChargers>>> = ({ signal }) => adminListChargers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminListChargers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminListChargersQueryResult = NonNullable<Awaited<ReturnType<typeof adminListChargers>>>
+export type AdminListChargersQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List all chargers with full session details (admin)
+ */
+
+export function useAdminListChargers<TData = Awaited<ReturnType<typeof adminListChargers>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChargers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminListChargersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminReleaseChargerUrl = (chargerId: number,) => {
+
+
+
+
+  return `/api/admin/chargers/${chargerId}/release`
+}
+
+/**
+ * @summary Force-release a stuck charger (admin override)
+ */
+export const adminReleaseCharger = async (chargerId: number, options?: Parameters<typeof customFetch>[1]): Promise<SuccessResponse> => {
+
+  return customFetch<SuccessResponse>(getAdminReleaseChargerUrl(chargerId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminReleaseChargerMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminReleaseCharger>>, TError,{chargerId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminReleaseCharger>>, TError,{chargerId: number}, TContext> => {
+
+const mutationKey = ['adminReleaseCharger'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminReleaseCharger>>, {chargerId: number}> = (props) => {
+          const {chargerId} = props ?? {};
+
+          return  adminReleaseCharger(chargerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminReleaseChargerMutationResult = NonNullable<Awaited<ReturnType<typeof adminReleaseCharger>>>
+
+    export type AdminReleaseChargerMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Force-release a stuck charger (admin override)
+ */
+export const useAdminReleaseCharger = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminReleaseCharger>>, TError,{chargerId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminReleaseCharger>>,
+        TError,
+        {chargerId: number},
+        TContext
+      > => {
+      return useMutation(getAdminReleaseChargerMutationOptions(options));
+    }
+
+export const getAdminListQueueUrl = () => {
+
+
+
+
+  return `/api/admin/queue`
+}
+
+/**
+ * @summary List all waiting queue entries (admin)
+ */
+export const adminListQueue = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminQueueEntry[]> => {
+
+  return customFetch<AdminQueueEntry[]>(getAdminListQueueUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminListQueueQueryKey = () => {
+    return [
+    `/api/admin/queue`
+    ] as const;
+    }
+
+
+export const getAdminListQueueQueryOptions = <TData = Awaited<ReturnType<typeof adminListQueue>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminListQueueQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminListQueue>>> = ({ signal }) => adminListQueue({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminListQueue>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminListQueueQueryResult = NonNullable<Awaited<ReturnType<typeof adminListQueue>>>
+export type AdminListQueueQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List all waiting queue entries (admin)
+ */
+
+export function useAdminListQueue<TData = Awaited<ReturnType<typeof adminListQueue>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminListQueueQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminRemoveQueueEntryUrl = (entryId: number,) => {
+
+
+
+
+  return `/api/admin/queue/${entryId}`
+}
+
+/**
+ * @summary Remove any queue entry (admin override)
+ */
+export const adminRemoveQueueEntry = async (entryId: number, options?: Parameters<typeof customFetch>[1]): Promise<SuccessResponse> => {
+
+  return customFetch<SuccessResponse>(getAdminRemoveQueueEntryUrl(entryId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminRemoveQueueEntryMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRemoveQueueEntry>>, TError,{entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminRemoveQueueEntry>>, TError,{entryId: number}, TContext> => {
+
+const mutationKey = ['adminRemoveQueueEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminRemoveQueueEntry>>, {entryId: number}> = (props) => {
+          const {entryId} = props ?? {};
+
+          return  adminRemoveQueueEntry(entryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminRemoveQueueEntryMutationResult = NonNullable<Awaited<ReturnType<typeof adminRemoveQueueEntry>>>
+
+    export type AdminRemoveQueueEntryMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Remove any queue entry (admin override)
+ */
+export const useAdminRemoveQueueEntry = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRemoveQueueEntry>>, TError,{entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminRemoveQueueEntry>>,
+        TError,
+        {entryId: number},
+        TContext
+      > => {
+      return useMutation(getAdminRemoveQueueEntryMutationOptions(options));
+    }
+
+export const getAdminGetTodaySessionsUrl = () => {
+
+
+
+
+  return `/api/admin/sessions/today`
+}
+
+/**
+ * @summary Get today's session log (admin)
+ */
+export const adminGetTodaySessions = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminSession[]> => {
+
+  return customFetch<AdminSession[]>(getAdminGetTodaySessionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetTodaySessionsQueryKey = () => {
+    return [
+    `/api/admin/sessions/today`
+    ] as const;
+    }
+
+
+export const getAdminGetTodaySessionsQueryOptions = <TData = Awaited<ReturnType<typeof adminGetTodaySessions>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetTodaySessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetTodaySessionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetTodaySessions>>> = ({ signal }) => adminGetTodaySessions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetTodaySessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetTodaySessionsQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetTodaySessions>>>
+export type AdminGetTodaySessionsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get today's session log (admin)
+ */
+
+export function useAdminGetTodaySessions<TData = Awaited<ReturnType<typeof adminGetTodaySessions>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetTodaySessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetTodaySessionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetDashboardSummaryUrl = () => {
 

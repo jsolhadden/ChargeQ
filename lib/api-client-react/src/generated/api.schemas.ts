@@ -126,3 +126,77 @@ export interface ApiError {
   error: string;
 }
 
+export type AdminChargerStatus = typeof AdminChargerStatus[keyof typeof AdminChargerStatus];
+
+
+export const AdminChargerStatus = {
+  available: 'available',
+  assigned: 'assigned',
+  occupied: 'occupied',
+} as const;
+
+export interface AdminCharger {
+  id: number;
+  name: string;
+  status: AdminChargerStatus;
+  /** @nullable */
+  currentSessionId?: number | null;
+  /** @nullable */
+  currentUserId?: string | null;
+  /** @nullable */
+  currentUserName?: string | null;
+}
+
+export type AdminQueueEntryStatus = typeof AdminQueueEntryStatus[keyof typeof AdminQueueEntryStatus];
+
+
+export const AdminQueueEntryStatus = {
+  waiting: 'waiting',
+  assigned: 'assigned',
+  cancelled: 'cancelled',
+  forfeited: 'forfeited',
+} as const;
+
+export interface AdminQueueEntry {
+  id: number;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  status: AdminQueueEntryStatus;
+  joinedAt: string;
+  position: number;
+  /** @nullable */
+  estimatedWaitMinutes?: number | null;
+  /** @nullable */
+  sessionId?: number | null;
+}
+
+export type AdminSessionStatus = typeof AdminSessionStatus[keyof typeof AdminSessionStatus];
+
+
+export const AdminSessionStatus = {
+  assigned: 'assigned',
+  claimed: 'claimed',
+  checked_in: 'checked_in',
+  checked_out: 'checked_out',
+  forfeited: 'forfeited',
+  expired: 'expired',
+} as const;
+
+export interface AdminSession {
+  id: number;
+  userId: string;
+  userName: string;
+  chargerId: number;
+  chargerName: string;
+  status: AdminSessionStatus;
+  assignedAt: string;
+  claimDeadlineAt: string;
+  /** @nullable */
+  claimedAt?: string | null;
+  /** @nullable */
+  checkedInAt?: string | null;
+  /** @nullable */
+  checkedOutAt?: string | null;
+}
+

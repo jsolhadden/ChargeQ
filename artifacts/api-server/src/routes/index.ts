@@ -4,6 +4,7 @@ import chargersRouter from "./chargers";
 import queueRouter from "./queue";
 import sessionsRouter from "./sessions";
 import dashboardRouter from "./dashboard";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(chargersRouter);
 router.use(queueRouter);
 router.use(sessionsRouter);
 router.use(dashboardRouter);
+router.use(adminRouter);
 
 export default router;

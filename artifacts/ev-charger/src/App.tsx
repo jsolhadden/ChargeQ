@@ -11,6 +11,7 @@ import NotFound from '@/pages/not-found';
 import Home from '@/pages/Home';
 import Dashboard from '@/pages/Dashboard';
 import MySpot from '@/pages/MySpot';
+import Admin from '@/pages/Admin';
 
 const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN as string | undefined;
 
@@ -207,6 +208,7 @@ function ClerkProviderWithRoutes() {
             <Switch>
               <Route path="/" component={HomeRedirect} />
               <Route path="/my-spot" component={MySpotRoute} />
+              <Route path="/admin" component={Admin} />
               <Route path="/sign-in/*?" component={SignInPage} />
               <Route path="/sign-up/*?" component={SignUpPage} />
               <Route component={NotFound} />

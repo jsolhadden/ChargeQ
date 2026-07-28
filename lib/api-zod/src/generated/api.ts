@@ -202,6 +202,82 @@ export const CheckOutSessionResponse = zod.object({
 
 
 /**
+ * @summary List all chargers with full session details (admin)
+ */
+export const AdminListChargersResponseItem = zod.object({
+  "id": zod.int(),
+  "name": zod.string(),
+  "status": zod.enum(['available', 'assigned', 'occupied']),
+  "currentSessionId": zod.int().nullish(),
+  "currentUserId": zod.string().nullish(),
+  "currentUserName": zod.string().nullish()
+})
+export const AdminListChargersResponse = zod.array(AdminListChargersResponseItem)
+
+
+/**
+ * @summary Force-release a stuck charger (admin override)
+ */
+export const AdminReleaseChargerParams = zod.object({
+  "chargerId": zod.coerce.number().int()
+})
+
+export const AdminReleaseChargerResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string().optional()
+})
+
+
+/**
+ * @summary List all waiting queue entries (admin)
+ */
+export const AdminListQueueResponseItem = zod.object({
+  "id": zod.int(),
+  "userId": zod.string(),
+  "userName": zod.string(),
+  "userEmail": zod.string(),
+  "status": zod.enum(['waiting', 'assigned', 'cancelled', 'forfeited']),
+  "joinedAt": zod.coerce.date(),
+  "position": zod.int(),
+  "estimatedWaitMinutes": zod.int().nullish(),
+  "sessionId": zod.int().nullish()
+})
+export const AdminListQueueResponse = zod.array(AdminListQueueResponseItem)
+
+
+/**
+ * @summary Remove any queue entry (admin override)
+ */
+export const AdminRemoveQueueEntryParams = zod.object({
+  "entryId": zod.coerce.number().int()
+})
+
+export const AdminRemoveQueueEntryResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string().optional()
+})
+
+
+/**
+ * @summary Get today's session log (admin)
+ */
+export const AdminGetTodaySessionsResponseItem = zod.object({
+  "id": zod.int(),
+  "userId": zod.string(),
+  "userName": zod.string(),
+  "chargerId": zod.int(),
+  "chargerName": zod.string(),
+  "status": zod.enum(['assigned', 'claimed', 'checked_in', 'checked_out', 'forfeited', 'expired']),
+  "assignedAt": zod.coerce.date(),
+  "claimDeadlineAt": zod.coerce.date(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "checkedInAt": zod.coerce.date().nullish(),
+  "checkedOutAt": zod.coerce.date().nullish()
+})
+export const AdminGetTodaySessionsResponse = zod.array(AdminGetTodaySessionsResponseItem)
+
+
+/**
  * @summary Get a real-time summary of charger and queue state
  */
 export const GetDashboardSummaryResponse = zod.object({

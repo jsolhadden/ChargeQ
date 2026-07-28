@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { Show, useClerk, useUser } from '@clerk/react';
-import { LogOut, Zap, ArrowRight } from 'lucide-react';
+import { LogOut, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
 import {
   useListChargers,
   useListQueue,
@@ -186,6 +186,15 @@ export default function Dashboard() {
           </Link>
 
           <Show when="signed-in">
+            {/* Admin link — only visible to admin users */}
+            {user?.publicMetadata?.role === 'admin' && (
+              <Link href="/admin">
+                <Button size="sm" variant="outline" className="gap-1.5 mr-2 text-primary border-primary/30 hover:bg-primary/10">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Admin
+                </Button>
+              </Link>
+            )}
             {/* Visible during the loading window and if user navigates back */}
             {myStatusLoading && (
               <Link href="/my-spot">

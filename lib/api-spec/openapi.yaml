@@ -18,6 +18,8 @@ tags:
     description: Charging session operations
   - name: dashboard
     description: Dashboard operations
+  - name: admin
+    description: Admin / facilities management operations
 
 paths:
   /healthz:
@@ -236,6 +238,131 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /admin/chargers:
+    get:
+      operationId: adminListChargers
+      tags: [admin]
+      summary: List all chargers with full session details (admin)
+      responses:
+        "200":
+          description: List of chargers with session info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminCharger"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/chargers/{chargerId}/release:
+    post:
+      operationId: adminReleaseCharger
+      tags: [admin]
+      summary: Force-release a stuck charger (admin override)
+      parameters:
+        - name: chargerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Charger released
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Charger not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/queue:
+    get:
+      operationId: adminListQueue
+      tags: [admin]
+      summary: List all waiting queue entries (admin)
+      responses:
+        "200":
+          description: All waiting queue entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminQueueEntry"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/queue/{entryId}:
+    delete:
+      operationId: adminRemoveQueueEntry
+      tags: [admin]
+      summary: Remove any queue entry (admin override)
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Queue entry removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/sessions/today:
+    get:
+      operationId: adminGetTodaySessions
+      tags: [admin]
+      summary: Get today's session log (admin)
+      responses:
+        "200":
+          description: Today's sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminSession"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -396,3 +523,79 @@ components:
       properties:
         error:
           type: string
+
+    AdminCharger:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum: [available, assigned, occupied]
+        currentSessionId:
+          type: ["integer", "null"]
+        currentUserId:
+          type: ["string", "null"]
+        currentUserName:
+          type: ["string", "null"]
+
+    AdminQueueEntry:
+      type: object
+      required: [id, userId, userName, userEmail, status, joinedAt, position]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        status:
+          type: string
+          enum: [waiting, assigned, cancelled, forfeited]
+        joinedAt:
+          type: string
+          format: date-time
+        position:
+          type: integer
+        estimatedWaitMinutes:
+          type: ["integer", "null"]
+        sessionId:
+          type: ["integer", "null"]
+
+    AdminSession:
+      type: object
+      required: [id, userId, userName, chargerId, chargerName, status, assignedAt, claimDeadlineAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userName:
+          type: string
+        chargerId:
+          type: integer
+        chargerName:
+          type: string
+        status:
+          type: string
+          enum: [assigned, claimed, checked_in, checked_out, forfeited, expired]
+        assignedAt:
+          type: string
+          format: date-time
+        claimDeadlineAt:
+          type: string
+          format: date-time
+        claimedAt:
+          type: ["string", "null"]
+          format: date-time
+        checkedInAt:
+          type: ["string", "null"]
+          format: date-time
+        checkedOutAt:
+          type: ["string", "null"]
+          format: date-time
