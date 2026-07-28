@@ -16,13 +16,26 @@ export async function sendChargerAssignedEmail(params: AssignmentEmailParams): P
     return;
   }
 
-  const deadlineStr = claimDeadline.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/New_York",
-    timeZoneName: "short",
-  });
+  // Compute Eastern time without relying on ICU timezone data (unavailable in prod).
+  // DST: UTC-4 (EDT) from 2nd Sunday in March 2am → 1st Sunday in November 2am.
+  const getNthSundayUTC = (year: number, month: number, n: number): Date => {
+    const d = new Date(Date.UTC(year, month, 1));
+    d.setUTCDate(1 + ((7 - d.getUTCDay()) % 7) + (n - 1) * 7);
+    return d;
+  };
+  const yr = claimDeadline.getUTCFullYear();
+  const dstStart = getNthSundayUTC(yr, 2, 2); // 2nd Sun March
+  dstStart.setUTCHours(7); // 2 AM EST = 7 AM UTC
+  const dstEnd = getNthSundayUTC(yr, 10, 1); // 1st Sun November
+  dstEnd.setUTCHours(6); // 2 AM EDT = 6 AM UTC
+  const isDST = claimDeadline >= dstStart && claimDeadline < dstEnd;
+  const easternMs = claimDeadline.getTime() - (isDST ? 4 : 5) * 3600_000;
+  const et = new Date(easternMs);
+  const h = et.getUTCHours();
+  const m = et.getUTCMinutes().toString().padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  const deadlineStr = `${h12}:${m} ${ampm} ${isDST ? "EDT" : "EST"}`;
 
   const { Resend } = await import("resend");
   const resend = new Resend(resendKey);
