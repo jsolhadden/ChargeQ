@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { Show, useClerk, useUser } from '@clerk/react';
-import { LogOut, Zap, UserCircle } from 'lucide-react';
+import { LogOut, Zap, UserCircle, ArrowRight } from 'lucide-react';
 import {
   useListChargers,
   useListQueue,
@@ -121,6 +121,8 @@ export default function Dashboard() {
   };
 
   // Redirect to /my-spot if user has an active session
+  // Note: 'claimed' DB status is returned as state 'assigned' by the API,
+  // so this redirect covers assigned, claimed, and checked_in sessions.
   if (myStatus?.state === 'assigned' || myStatus?.state === 'checked_in') {
     return <Redirect to="/my-spot" />;
   }
@@ -149,6 +151,16 @@ export default function Dashboard() {
           </Link>
 
           <Show when="signed-in">
+            {/* Visible during the loading window and if user navigates back */}
+            {myStatusLoading && (
+              <Link href="/my-spot">
+                <Button size="sm" variant="outline" className="gap-1.5 mr-2">
+                  <Zap className="w-3.5 h-3.5" />
+                  My Spot
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full" data-testid="button-user-menu">

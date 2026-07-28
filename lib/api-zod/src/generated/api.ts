@@ -82,7 +82,7 @@ export const GetMyQueueEntryResponse = zod.object({
   "status": zod.enum(['waiting', 'assigned', 'cancelled', 'forfeited']),
   "sessionId": zod.int().nullish(),
   "estimatedWaitMinutes": zod.int().nullish()
-}).optional(),
+}).nullable(),
   "session": zod.object({
   "id": zod.int(),
   "userId": zod.string(),
@@ -96,7 +96,7 @@ export const GetMyQueueEntryResponse = zod.object({
   "checkedInAt": zod.coerce.date().nullish(),
   "checkedOutAt": zod.coerce.date().nullish(),
   "minutesRemainingToClaim": zod.int().nullish()
-}).optional()
+}).nullable()
 })
 
 

@@ -279,15 +279,19 @@ components:
 
     MyStatus:
       type: object
-      required: [state]
+      required: [state, queueEntry, session]
       properties:
         state:
           type: string
           enum: [not_in_queue, waiting, assigned, checked_in, checked_out]
         queueEntry:
-          $ref: "#/components/schemas/QueueEntry"
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/QueueEntry"
         session:
-          $ref: "#/components/schemas/ChargingSession"
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ChargingSession"
 
     ChargingSession:
       type: object
