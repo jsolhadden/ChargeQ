@@ -23,6 +23,7 @@ import type {
   ApiError,
   Charger,
   ChargingSession,
+  ClaimDirectInput,
   DashboardSummary,
   HealthStatus,
   JoinQueueInput,
@@ -506,6 +507,77 @@ export const useLeaveQueue = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getLeaveQueueMutationOptions(options));
+    }
+
+export const getClaimDirectSessionUrl = () => {
+
+
+
+
+  return `/api/sessions/direct`
+}
+
+/**
+ * @summary Directly claim an available charger by choice (skips queue)
+ */
+export const claimDirectSession = async (claimDirectInput: ClaimDirectInput, options?: Parameters<typeof customFetch>[1]): Promise<ChargingSession> => {
+
+  return customFetch<ChargingSession>(getClaimDirectSessionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(claimDirectInput)
+  }
+);}
+
+
+
+
+
+export const getClaimDirectSessionMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimDirectSession>>, TError,{data: BodyType<ClaimDirectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimDirectSession>>, TError,{data: BodyType<ClaimDirectInput>}, TContext> => {
+
+const mutationKey = ['claimDirectSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimDirectSession>>, {data: BodyType<ClaimDirectInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  claimDirectSession(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimDirectSessionMutationResult = NonNullable<Awaited<ReturnType<typeof claimDirectSession>>>
+    export type ClaimDirectSessionMutationBody = BodyType<ClaimDirectInput>
+    export type ClaimDirectSessionMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Directly claim an available charger by choice (skips queue)
+ */
+export const useClaimDirectSession = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimDirectSession>>, TError,{data: BodyType<ClaimDirectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimDirectSession>>,
+        TError,
+        {data: BodyType<ClaimDirectInput>},
+        TContext
+      > => {
+      return useMutation(getClaimDirectSessionMutationOptions(options));
     }
 
 export const getClaimSessionUrl = (sessionId: number,) => {

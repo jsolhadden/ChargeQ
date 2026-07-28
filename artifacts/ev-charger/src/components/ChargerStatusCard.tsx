@@ -1,14 +1,19 @@
 import { motion } from 'framer-motion';
-import { Zap, User, Clock } from 'lucide-react';
+import { Zap, User } from 'lucide-react';
 import type { Charger } from '@workspace/api-client-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 interface ChargerStatusCardProps {
   charger: Charger;
+  /** Called when the user clicks "Take this charger". Only shown when charger is available. */
+  onTake?: (chargerId: number) => void;
+  isTaking?: boolean;
+  canTake?: boolean;
 }
 
-export function ChargerStatusCard({ charger }: ChargerStatusCardProps) {
+export function ChargerStatusCard({ charger, onTake, isTaking, canTake }: ChargerStatusCardProps) {
   const statusConfig = {
     available: {
       label: 'Available',
@@ -31,6 +36,7 @@ export function ChargerStatusCard({ charger }: ChargerStatusCardProps) {
   };
 
   const config = statusConfig[charger.status];
+  const showTakeButton = charger.status === 'available' && canTake && onTake;
 
   return (
     <motion.div
@@ -50,8 +56,8 @@ export function ChargerStatusCard({ charger }: ChargerStatusCardProps) {
                 <h3 className="font-display text-xl font-bold text-foreground" data-testid={`charger-name-${charger.id}`}>
                   {charger.name}
                 </h3>
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={`mt-1.5 font-medium ${config.color}`}
                   data-testid={`charger-status-${charger.id}`}
                 >
@@ -59,6 +65,18 @@ export function ChargerStatusCard({ charger }: ChargerStatusCardProps) {
                 </Badge>
               </div>
             </div>
+
+            {showTakeButton && (
+              <Button
+                size="sm"
+                onClick={() => onTake(charger.id)}
+                disabled={isTaking}
+                className="shrink-0 font-semibold"
+                data-testid={`button-take-charger-${charger.id}`}
+              >
+                {isTaking ? 'Taking…' : 'Take this charger'}
+              </Button>
+            )}
           </div>
 
           {charger.currentUserName && (

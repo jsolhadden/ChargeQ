@@ -11,6 +11,7 @@ export * from './charger';
 export * from './chargerStatus';
 export * from './chargingSession';
 export * from './chargingSessionStatus';
+export * from './claimDirectInput';
 export * from './dashboardSummary';
 export * from './healthStatus';
 export * from './joinQueueInput';

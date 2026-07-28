@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { Show, useClerk, useUser } from '@clerk/react';
-import { LogOut, Zap, UserCircle, ArrowRight } from 'lucide-react';
+import { LogOut, Zap, ArrowRight } from 'lucide-react';
 import {
   useListChargers,
   useListQueue,
@@ -10,6 +10,7 @@ import {
   useGetDashboardSummary,
   useJoinQueue,
   useLeaveQueue,
+  useClaimDirectSession,
   getListChargersQueryKey,
   getListQueueQueryKey,
   getGetMyQueueEntryQueryKey,
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const { signOut } = useClerk();
   const { user } = useUser();
+  const [takingChargerId, setTakingChargerId] = useState<number | null>(null);
 
   const { data: chargers, isLoading: chargersLoading } = useListChargers({
     query: {
@@ -110,6 +112,34 @@ export default function Dashboard() {
     },
   });
 
+  const claimDirectMutation = useClaimDirectSession({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyQueueEntryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+        setTakingChargerId(null);
+        // myStatus will update to 'assigned' → Dashboard redirects to /my-spot automatically
+      },
+      onError: (error: any) => {
+        setTakingChargerId(null);
+        const msg = error?.response?.data?.error || error?.message || 'Please try again';
+        toast({
+          title: 'Charger unavailable',
+          description: msg,
+          variant: 'destructive',
+        });
+        // Refresh charger list so stale availability clears
+        queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
+      },
+    },
+  });
+
+  const handleTakeCharger = (chargerId: number) => {
+    setTakingChargerId(chargerId);
+    claimDirectMutation.mutate({ data: { chargerId } });
+  };
+
   const handleJoinQueue = () => {
     joinQueueMutation.mutate({ data: {} });
   };
@@ -129,7 +159,11 @@ export default function Dashboard() {
 
   const isLoading = chargersLoading || queueLoading || myStatusLoading || summaryLoading;
   const inQueue = myStatus?.state === 'waiting';
-  const canJoinQueue = myStatus?.state === 'not_in_queue';
+  const isNotInQueue = myStatus?.state === 'not_in_queue';
+  const anyChargerAvailable = chargers?.some((c) => c.status === 'available') ?? false;
+  const allChargersBusy = !anyChargerAvailable;
+  // Show "Join Waitlist" only when every charger is occupied/assigned
+  const canJoinQueue = isNotInQueue && allChargersBusy;
 
   const userInitials = user?.firstName && user?.lastName 
     ? `${user.firstName[0]}${user.lastName[0]}` 
@@ -212,7 +246,13 @@ export default function Dashboard() {
               <h2 className="font-display text-2xl font-bold text-foreground mb-4">Charger Status</h2>
               <div className="grid md:grid-cols-2 gap-4">
                 {chargers?.map((charger) => (
-                  <ChargerStatusCard key={charger.id} charger={charger} />
+                  <ChargerStatusCard
+                    key={charger.id}
+                    charger={charger}
+                    onTake={isNotInQueue ? handleTakeCharger : undefined}
+                    isTaking={takingChargerId === charger.id}
+                    canTake={isNotInQueue && !claimDirectMutation.isPending}
+                  />
                 ))}
               </div>
             </div>
@@ -229,9 +269,13 @@ export default function Dashboard() {
                         <> • ~{myStatus.queueEntry.estimatedWaitMinutes}m wait</>
                       )}
                     </p>
+                  ) : isNotInQueue && anyChargerAvailable ? (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Pick an available charger above ↑
+                    </p>
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1">
-                      Not in queue
+                      All chargers are busy — join the waitlist to be next in line
                     </p>
                   )}
                 </div>
@@ -244,7 +288,7 @@ export default function Dashboard() {
                       className="font-semibold"
                       data-testid="button-join-queue"
                     >
-                      {joinQueueMutation.isPending ? 'Joining...' : 'Join Queue'}
+                      {joinQueueMutation.isPending ? 'Joining...' : 'Join Waitlist'}
                     </Button>
                   )}
                   {inQueue && (
@@ -256,7 +300,7 @@ export default function Dashboard() {
                       className="font-semibold"
                       data-testid="button-leave-queue"
                     >
-                      {leaveQueueMutation.isPending ? 'Leaving...' : 'Leave Queue'}
+                      {leaveQueueMutation.isPending ? 'Leaving...' : 'Leave Waitlist'}
                     </Button>
                   )}
                 </div>

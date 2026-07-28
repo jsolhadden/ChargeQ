@@ -130,6 +130,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /sessions/direct:
+    post:
+      operationId: claimDirectSession
+      tags: [sessions]
+      summary: Directly claim an available charger by choice (skips queue)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimDirectInput"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargingSession"
+        "409":
+          description: Charger no longer available (race condition)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "400":
+          description: User already has an active session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /sessions/{sessionId}/claim:
     post:
       operationId: claimSession
@@ -276,6 +307,13 @@ components:
       properties:
         note:
           type: string
+
+    ClaimDirectInput:
+      type: object
+      required: [chargerId]
+      properties:
+        chargerId:
+          type: integer
 
     MyStatus:
       type: object

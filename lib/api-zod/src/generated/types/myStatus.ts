@@ -11,6 +11,6 @@ import type { QueueEntry } from './queueEntry';
 
 export interface MyStatus {
   state: MyStatusState;
-  queueEntry?: QueueEntry;
-  session?: ChargingSession;
+  queueEntry: QueueEntry | null;
+  session: ChargingSession | null;
 }

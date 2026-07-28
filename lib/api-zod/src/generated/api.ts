@@ -114,6 +114,29 @@ export const LeaveQueueResponse = zod.object({
 
 
 /**
+ * @summary Directly claim an available charger by choice (skips queue)
+ */
+export const ClaimDirectSessionBody = zod.object({
+  "chargerId": zod.int()
+})
+
+export const ClaimDirectSessionResponse = zod.object({
+  "id": zod.int(),
+  "userId": zod.string(),
+  "userName": zod.string().optional(),
+  "chargerId": zod.int(),
+  "chargerName": zod.string(),
+  "status": zod.enum(['assigned', 'claimed', 'checked_in', 'checked_out', 'forfeited', 'expired']),
+  "assignedAt": zod.coerce.date(),
+  "claimDeadlineAt": zod.coerce.date().optional(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "checkedInAt": zod.coerce.date().nullish(),
+  "checkedOutAt": zod.coerce.date().nullish(),
+  "minutesRemainingToClaim": zod.int().nullish()
+})
+
+
+/**
  * @summary Claim an assigned charger slot (within 60-minute window)
  */
 export const ClaimSessionParams = zod.object({

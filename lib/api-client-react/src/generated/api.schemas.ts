@@ -58,6 +58,10 @@ export interface JoinQueueInput {
   note?: string;
 }
 
+export interface ClaimDirectInput {
+  chargerId: number;
+}
+
 export type MyStatusState = typeof MyStatusState[keyof typeof MyStatusState];
 
 
@@ -102,8 +106,8 @@ export interface ChargingSession {
 
 export interface MyStatus {
   state: MyStatusState;
-  queueEntry?: QueueEntry;
-  session?: ChargingSession;
+  queueEntry: QueueEntry | null;
+  session: ChargingSession | null;
 }
 
 export interface DashboardSummary {
