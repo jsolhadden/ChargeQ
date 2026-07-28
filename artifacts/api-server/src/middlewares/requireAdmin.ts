@@ -2,6 +2,11 @@ import { getAuth, clerkClient } from "@clerk/express";
 import type { Response, NextFunction } from "express";
 import type { AuthRequest } from "./requireAuth";
 
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
 export const requireAdmin = async (
   req: AuthRequest,
   res: Response,
@@ -17,7 +22,16 @@ export const requireAdmin = async (
   try {
     const user = await clerkClient.users.getUser(userId);
     const role = (user.publicMetadata as Record<string, unknown>)?.role;
-    if (role !== "admin") {
+    const primaryEmail = (
+      user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId) ??
+      user.emailAddresses[0]
+    )?.emailAddress?.toLowerCase() ?? "";
+
+    const isAdmin =
+      role === "admin" ||
+      (ADMIN_EMAILS.length > 0 && ADMIN_EMAILS.includes(primaryEmail));
+
+    if (!isAdmin) {
       res.status(403).json({ error: "Admin access required" });
       return;
     }
