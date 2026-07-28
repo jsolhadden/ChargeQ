@@ -27,3 +27,4 @@ channel = "stable-25_05"
 [userenv.shared]
 ALLOWED_EMAIL_DOMAIN = "irobot.com"
 VITE_ALLOWED_EMAIL_DOMAIN = "irobot.com"
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
