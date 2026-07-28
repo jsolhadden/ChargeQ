@@ -24,7 +24,6 @@ export const ListChargersResponseItem = zod.object({
   "name": zod.string(),
   "status": zod.enum(['available', 'assigned', 'occupied']),
   "currentSessionId": zod.int().nullish(),
-  "currentUserId": zod.string().nullish(),
   "currentUserName": zod.string().nullish()
 })
 export const ListChargersResponse = zod.array(ListChargersResponseItem)
@@ -37,7 +36,6 @@ export const ListQueueResponseItem = zod.object({
   "id": zod.int(),
   "userId": zod.string(),
   "userName": zod.string(),
-  "userEmail": zod.string(),
   "position": zod.int(),
   "joinedAt": zod.coerce.date(),
   "status": zod.enum(['waiting', 'assigned', 'cancelled', 'forfeited']),
@@ -58,7 +56,6 @@ export const JoinQueueResponse = zod.object({
   "id": zod.int(),
   "userId": zod.string(),
   "userName": zod.string(),
-  "userEmail": zod.string(),
   "position": zod.int(),
   "joinedAt": zod.coerce.date(),
   "status": zod.enum(['waiting', 'assigned', 'cancelled', 'forfeited']),
@@ -76,7 +73,6 @@ export const GetMyQueueEntryResponse = zod.object({
   "id": zod.int(),
   "userId": zod.string(),
   "userName": zod.string(),
-  "userEmail": zod.string(),
   "position": zod.int(),
   "joinedAt": zod.coerce.date(),
   "status": zod.enum(['waiting', 'assigned', 'cancelled', 'forfeited']),

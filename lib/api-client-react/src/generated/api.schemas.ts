@@ -25,8 +25,6 @@ export interface Charger {
   /** @nullable */
   currentSessionId?: number | null;
   /** @nullable */
-  currentUserId?: string | null;
-  /** @nullable */
   currentUserName?: string | null;
 }
 
@@ -44,7 +42,6 @@ export interface QueueEntry {
   id: number;
   userId: string;
   userName: string;
-  userEmail: string;
   position: number;
   joinedAt: string;
   status: QueueEntryStatus;

@@ -35,7 +35,29 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(cors({ credentials: true, origin: true }));
+// Lock CORS to the known Replit dev/prod domains only.
+// REPLIT_DOMAINS is a comma-separated list injected by the platform (e.g. "foo.replit.dev,foo.replit.app").
+const allowedOrigins = (process.env.REPLIT_DOMAINS ?? "")
+  .split(",")
+  .map((d) => d.trim())
+  .filter(Boolean)
+  .flatMap((d) => [`https://${d}`, `http://${d}`]);
+
+app.use(
+  cors({
+    credentials: true,
+    origin: allowedOrigins.length > 0
+      ? (origin, cb) => {
+          // Allow same-origin requests (no Origin header) and listed domains
+          if (!origin || allowedOrigins.includes(origin)) {
+            cb(null, true);
+          } else {
+            cb(new Error("Not allowed by CORS"));
+          }
+        }
+      : false,
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

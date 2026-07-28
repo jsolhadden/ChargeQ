@@ -272,22 +272,18 @@ components:
           enum: [available, assigned, occupied]
         currentSessionId:
           type: ["integer", "null"]
-        currentUserId:
-          type: ["string", "null"]
         currentUserName:
           type: ["string", "null"]
 
     QueueEntry:
       type: object
-      required: [id, userId, userName, userEmail, position, joinedAt, status]
+      required: [id, userId, userName, position, joinedAt, status]
       properties:
         id:
           type: integer
         userId:
           type: string
         userName:
-          type: string
-        userEmail:
           type: string
         position:
           type: integer

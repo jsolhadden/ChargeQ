@@ -2,10 +2,11 @@ import { Router, type IRouter } from "express";
 import { eq, and, count, gte } from "drizzle-orm";
 import { db, chargersTable, queueEntriesTable, chargingSessionsTable } from "@workspace/db";
 import { GetDashboardSummaryResponse } from "@workspace/api-zod";
+import { requireAuth, type AuthRequest } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-router.get("/dashboard/summary", async (req, res): Promise<void> => {
+router.get("/dashboard/summary", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const chargers = await db.select().from(chargersTable);
 
   const available = chargers.filter((c) => c.status === "available").length;

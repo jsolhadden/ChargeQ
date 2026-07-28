@@ -40,7 +40,7 @@ router.get("/chargers", requireAuth, async (req, res): Promise<void> => {
       return {
         ...charger,
         currentSessionId: session?.id ?? null,
-        currentUserId: session?.userId ?? null,
+        currentUserId: null, // not exposed to clients — stripped for privacy
         currentUserName: session?.userName ?? null,
       };
     }),

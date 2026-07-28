@@ -11,7 +11,6 @@ export interface QueueEntry {
   id: number;
   userId: string;
   userName: string;
-  userEmail: string;
   position: number;
   joinedAt: Date;
   status: QueueEntryStatus;

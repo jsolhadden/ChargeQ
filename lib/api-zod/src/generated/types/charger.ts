@@ -14,7 +14,5 @@ export interface Charger {
   /** @nullable */
   currentSessionId?: number | null;
   /** @nullable */
-  currentUserId?: string | null;
-  /** @nullable */
   currentUserName?: string | null;
 }
