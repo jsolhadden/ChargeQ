@@ -1,4 +1,4 @@
-import { eq, and, inArray, asc, lt } from "drizzle-orm";
+import { eq, and, inArray, asc, lt, sql } from "drizzle-orm";
 import { db, chargersTable, queueEntriesTable, chargingSessionsTable } from "@workspace/db";
 import { sendChargerAssignedEmail } from "./email";
 import { logger } from "./logger";
@@ -143,10 +143,13 @@ export async function seedChargers(): Promise<void> {
   await db
     .insert(chargersTable)
     .values([
-      { id: 1, name: "Charger A", status: "available" },
-      { id: 2, name: "Charger B", status: "available" },
+      { id: 1, name: "Left Charger", status: "available" },
+      { id: 2, name: "Right Charger", status: "available" },
     ])
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: chargersTable.id,
+      set: { name: sql`EXCLUDED.name` },
+    });
   logger.info("Chargers seeded (idempotent)");
 }
 
