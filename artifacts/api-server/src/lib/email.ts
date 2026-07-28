@@ -20,6 +20,8 @@ export async function sendChargerAssignedEmail(params: AssignmentEmailParams): P
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZone: "America/New_York",
+    timeZoneName: "short",
   });
 
   const { Resend } = await import("resend");
