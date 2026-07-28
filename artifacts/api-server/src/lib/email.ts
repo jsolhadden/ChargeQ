@@ -25,8 +25,11 @@ export async function sendChargerAssignedEmail(params: AssignmentEmailParams): P
   const { Resend } = await import("resend");
   const resend = new Resend(resendKey);
 
+  const fromAddress =
+    process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+
   await resend.emails.send({
-    from: "EV Charger Waitlist <noreply@evcharger.internal>",
+    from: `EV Charger Waitlist <${fromAddress}>`,
     to: toEmail,
     subject: `Your EV charger spot is ready — claim by ${deadlineStr}`,
     html: `
