@@ -202,6 +202,19 @@ export const CheckOutSessionResponse = zod.object({
 
 
 /**
+ * @summary Cancel an assigned session before claiming (releases charger back to queue)
+ */
+export const CancelSessionParams = zod.object({
+  "sessionId": zod.coerce.number().int()
+})
+
+export const CancelSessionResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string().optional()
+})
+
+
+/**
  * @summary List all chargers with full session details (admin)
  */
 export const AdminListChargersResponseItem = zod.object({

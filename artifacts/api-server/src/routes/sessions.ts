@@ -10,6 +10,7 @@ import {
   CheckInSessionResponse,
   CheckOutSessionParams,
   CheckOutSessionResponse,
+  CancelSessionParams,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/requireAuth";
 import { processQueue } from "../lib/queue";
@@ -285,6 +286,54 @@ router.post("/sessions/:sessionId/checkout", requireAuth, async (req: AuthReques
   await processQueue();
 
   res.json(CheckOutSessionResponse.parse(serializeSession(updated)));
+});
+
+// DELETE /sessions/:sessionId/cancel — release an assigned slot before claiming
+router.delete("/sessions/:sessionId/cancel", requireAuth, async (req: AuthRequest, res): Promise<void> => {
+  const raw = Array.isArray(req.params.sessionId) ? req.params.sessionId[0] : req.params.sessionId;
+  const params = CancelSessionParams.safeParse({ sessionId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(chargingSessionsTable)
+    .where(
+      and(
+        eq(chargingSessionsTable.id, params.data.sessionId),
+        eq(chargingSessionsTable.userId, req.userId!),
+      ),
+    )
+    .limit(1);
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (session.status !== "assigned") {
+    res.status(400).json({ error: `Cannot cancel — session is already ${session.status}` });
+    return;
+  }
+
+  // Mark session cancelled
+  await db
+    .update(chargingSessionsTable)
+    .set({ status: "cancelled" })
+    .where(eq(chargingSessionsTable.id, session.id));
+
+  // Free the charger
+  await db
+    .update(chargersTable)
+    .set({ status: "available" })
+    .where(eq(chargersTable.id, session.chargerId));
+
+  // Assign the next person in queue
+  await processQueue();
+
+  res.json({ success: true, message: "Reservation cancelled" });
 });
 
 export default router;

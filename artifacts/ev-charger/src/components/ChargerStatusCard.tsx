@@ -14,6 +14,12 @@ interface ChargerStatusCardProps {
 }
 
 export function ChargerStatusCard({ charger, onTake, isTaking, canTake }: ChargerStatusCardProps) {
+  const isTappable = charger.status === 'available' && canTake && !!onTake;
+
+  const handleCardClick = () => {
+    if (isTappable) onTake!(charger.id);
+  };
+
   const statusConfig = {
     available: {
       label: 'Available',
@@ -44,8 +50,10 @@ export function ChargerStatusCard({ charger, onTake, isTaking, canTake }: Charge
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       data-testid={`charger-card-${charger.id}`}
+      onClick={handleCardClick}
+      className={isTappable ? 'cursor-pointer' : undefined}
     >
-      <Card className="relative overflow-hidden border-card-border bg-card/50 backdrop-blur-sm">
+      <Card className={`relative overflow-hidden border-card-border bg-card/50 backdrop-blur-sm transition-colors${isTappable ? ' hover:border-primary/50 active:bg-card/80' : ''}`}>
         <div className="p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -69,7 +77,7 @@ export function ChargerStatusCard({ charger, onTake, isTaking, canTake }: Charge
             {showTakeButton && (
               <Button
                 size="sm"
-                onClick={() => onTake(charger.id)}
+                onClick={(e) => { e.stopPropagation(); onTake(charger.id); }}
                 disabled={isTaking}
                 className="shrink-0 font-semibold"
                 data-testid={`button-take-charger-${charger.id}`}

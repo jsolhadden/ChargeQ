@@ -796,6 +796,77 @@ export const useCheckOutSession = <TError = ErrorType<ApiError>,
       return useMutation(getCheckOutSessionMutationOptions(options));
     }
 
+export const getCancelSessionUrl = (sessionId: number,) => {
+
+
+
+
+  return `/api/sessions/${sessionId}/cancel`
+}
+
+/**
+ * @summary Cancel an assigned session before claiming (releases charger back to queue)
+ */
+export const cancelSession = async (sessionId: number, options?: Parameters<typeof customFetch>[1]): Promise<SuccessResponse> => {
+
+  return customFetch<SuccessResponse>(getCancelSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelSessionMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSession>>, TError,{sessionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelSession>>, TError,{sessionId: number}, TContext> => {
+
+const mutationKey = ['cancelSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelSession>>, {sessionId: number}> = (props) => {
+          const {sessionId} = props ?? {};
+
+          return  cancelSession(sessionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelSessionMutationResult = NonNullable<Awaited<ReturnType<typeof cancelSession>>>
+
+    export type CancelSessionMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Cancel an assigned session before claiming (releases charger back to queue)
+ */
+export const useCancelSession = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSession>>, TError,{sessionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelSession>>,
+        TError,
+        {sessionId: number},
+        TContext
+      > => {
+      return useMutation(getCancelSessionMutationOptions(options));
+    }
+
 export const getAdminListChargersUrl = () => {
 
 

@@ -8,6 +8,7 @@ import {
   useClaimSession,
   useCheckInSession,
   useCheckOutSession,
+  useCancelSession,
   getGetMyQueueEntryQueryKey,
   getListChargersQueryKey,
   getListQueueQueryKey,
@@ -41,6 +42,28 @@ export default function MySpot() {
     query: {
       queryKey: getGetMyQueueEntryQueryKey(),
       refetchInterval: 3000,
+    },
+  });
+
+  const cancelSessionMutation = useCancelSession({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetMyQueueEntryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListQueueQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+        toast({
+          title: 'Reservation cancelled',
+          description: 'Your spot has been released.',
+        });
+      },
+      onError: (error: any) => {
+        toast({
+          title: 'Could not cancel',
+          description: error?.message || 'Please try again',
+          variant: 'destructive',
+        });
+      },
     },
   });
 
@@ -108,6 +131,12 @@ export default function MySpot() {
       },
     },
   });
+
+  const handleCancel = () => {
+    if (myStatus?.session?.id) {
+      cancelSessionMutation.mutate({ sessionId: myStatus.session.id });
+    }
+  };
 
   const handleClaim = () => {
     if (myStatus?.session?.id) {
@@ -273,15 +302,27 @@ export default function MySpot() {
 
                 <div className="space-y-3">
                   {session?.status === 'assigned' && (
-                    <Button
-                      onClick={handleClaim}
-                      disabled={claimSessionMutation.isPending}
-                      size="lg"
-                      className="w-full font-semibold text-lg h-14"
-                      data-testid="button-claim"
-                    >
-                      {claimSessionMutation.isPending ? 'Claiming...' : config?.action}
-                    </Button>
+                    <>
+                      <Button
+                        onClick={handleClaim}
+                        disabled={claimSessionMutation.isPending || cancelSessionMutation.isPending}
+                        size="lg"
+                        className="w-full font-semibold text-lg h-14"
+                        data-testid="button-claim"
+                      >
+                        {claimSessionMutation.isPending ? 'Claiming...' : config?.action}
+                      </Button>
+                      <Button
+                        onClick={handleCancel}
+                        disabled={cancelSessionMutation.isPending || claimSessionMutation.isPending}
+                        size="lg"
+                        variant="ghost"
+                        className="w-full font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        data-testid="button-cancel-reservation"
+                      >
+                        {cancelSessionMutation.isPending ? 'Cancelling...' : "I don't need this spot"}
+                      </Button>
+                    </>
                   )}
 
                   {session?.status === 'claimed' && (

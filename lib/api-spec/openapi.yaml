@@ -238,6 +238,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /sessions/{sessionId}/cancel:
+    delete:
+      operationId: cancelSession
+      tags: [sessions]
+      summary: Cancel an assigned session before claiming (releases charger back to queue)
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session cancelled and charger freed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Session is not in a cancellable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /admin/chargers:
     get:
       operationId: adminListChargers
