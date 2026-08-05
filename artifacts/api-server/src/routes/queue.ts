@@ -147,25 +147,22 @@ router.post("/queue", requireAuth, async (req: AuthRequest, res): Promise<void> 
 
   // Get user details from Clerk — prefer session claims (fast), fall back to
   // the Clerk API when the email claim is absent (e.g. production tokens).
-  let userName = "Employee";
+  // userName is derived from the email local-part (e.g. "jhadden" from "jhadden@irobot.com").
+  let userName = "employee";
   let userEmail = "";
   try {
     const auth = getAuth(req);
-    const firstName = (auth as any)?.sessionClaims?.given_name ?? "";
-    const lastName = (auth as any)?.sessionClaims?.family_name ?? "";
     const emailFromClaim = (auth as any)?.sessionClaims?.email ?? "";
-    userName = [firstName, lastName].filter(Boolean).join(" ") || "Employee";
     userEmail = emailFromClaim;
 
     // If session claims didn't carry the email, fetch it from the Clerk API
     if (!userEmail) {
       const clerkUser = await clerkClient.users.getUser(userId);
       userEmail = clerkUser.emailAddresses[0]?.emailAddress ?? "";
-      if (!userName || userName === "Employee") {
-        userName =
-          [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
-          "Employee";
-      }
+    }
+
+    if (userEmail) {
+      userName = userEmail.split("@")[0] || "employee";
     }
   } catch {
     // fallback values are fine

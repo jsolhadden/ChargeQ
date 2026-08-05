@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/requireAuth";
 import { processQueue } from "../lib/queue";
+import { getAuth, clerkClient } from "@clerk/express";
 
 const CLAIM_WINDOW_MINUTES = 60;
 
@@ -32,11 +33,22 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
   const now = new Date();
   const claimDeadline = new Date(now.getTime() + CLAIM_WINDOW_MINUTES * 60 * 1000);
 
-  // Get user display name from Clerk session claims
-  const clerkAuth = req as any;
-  const firstName = clerkAuth?.auth?.sessionClaims?.given_name ?? "";
-  const lastName = clerkAuth?.auth?.sessionClaims?.family_name ?? "";
-  const userName = [firstName, lastName].filter(Boolean).join(" ") || "Employee";
+  // Derive userName from the email local-part (e.g. "jhadden" from "jhadden@irobot.com").
+  // Prefer session claims; fall back to the Clerk API when the email claim is absent.
+  let userName = "employee";
+  try {
+    const auth = getAuth(req);
+    let userEmail = (auth as any)?.sessionClaims?.email ?? "";
+    if (!userEmail) {
+      const clerkUser = await clerkClient.users.getUser(userId);
+      userEmail = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+    }
+    if (userEmail) {
+      userName = userEmail.split("@")[0] || "employee";
+    }
+  } catch {
+    // fallback value is fine
+  }
 
   let session: typeof chargingSessionsTable.$inferSelect | null = null;
 

@@ -27,7 +27,7 @@ router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
   const { data: users } = await clerkClient.users.getUserList({ limit: 100 });
   const result = users.map((u) => ({
     id: u.id,
-    name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.emailAddresses[0]?.emailAddress || "Unknown",
+    name: u.emailAddresses[0]?.emailAddress?.split("@")[0] || "Unknown",
     email: u.emailAddresses[0]?.emailAddress ?? "",
   }));
   res.json(result);
