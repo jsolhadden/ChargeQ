@@ -72,8 +72,7 @@ export async function processQueue(): Promise<void> {
 
 /**
  * Expires sessions where the claim window has passed without claiming.
- * Expires active sessions left open at end of day.
- * Should be called periodically.
+ * Should be called every 2 minutes — time-sensitive for 60-minute claim windows.
  */
 export async function runExpiryCheck(): Promise<void> {
   const now = new Date();
@@ -110,9 +109,21 @@ export async function runExpiryCheck(): Promise<void> {
     logger.info({ count: expiredAssigned.length }, "Forfeited expired claim sessions");
     await processQueue();
   }
+}
 
-  // End-of-day: expire active sessions and clear waiting queue at 11:55 PM Eastern.
-  // Compute Eastern hour without relying on ICU (same DST logic as email.ts).
+/**
+ * Returns the UTC timestamp for the start of "today" in Eastern time.
+ * Uses manual DST arithmetic (2nd Sunday Mar → 1st Sunday Nov) so it works
+ * without ICU data in production.
+ *
+ * Two-step to handle DST transition days correctly:
+ *  1. Use the *current* DST offset to determine today's ET date (avoids the
+ *     1-hour window around midnight where a fixed -5h approximation picks the
+ *     wrong calendar day during EDT).
+ *  2. Then determine the DST offset *at midnight* of that ET date — which can
+ *     differ from the current offset on spring-forward / fall-back days.
+ */
+function getStartOfTodayET(now: Date): Date {
   const getNthSundayUTC = (year: number, month: number, n: number): Date => {
     const d = new Date(Date.UTC(year, month, 1));
     d.setUTCDate(1 + ((7 - d.getUTCDay()) % 7) + (n - 1) * 7);
@@ -123,45 +134,88 @@ export async function runExpiryCheck(): Promise<void> {
   dstStart.setUTCHours(7); // 2 AM EST = 7 AM UTC
   const dstEnd = getNthSundayUTC(yr, 10, 1);
   dstEnd.setUTCHours(6); // 2 AM EDT = 6 AM UTC
-  const isDST = now >= dstStart && now < dstEnd;
-  const easternHour = (now.getUTCHours() - (isDST ? 4 : 5) + 24) % 24;
-  const easternMinute = now.getUTCMinutes();
 
-  if (easternHour === 23 && easternMinute >= 55) {
-    // Expire active sessions
-    const staleSessions = await db
-      .select()
-      .from(chargingSessionsTable)
-      .where(inArray(chargingSessionsTable.status, ["checked_in", "claimed"]));
+  // Step 1: determine today's ET calendar date using the current offset.
+  const isDSTNow = now >= dstStart && now < dstEnd;
+  const offsetNow = isDSTNow ? 4 : 5;
+  const nowET = new Date(now.getTime() - offsetNow * 60 * 60 * 1000);
+  const year = nowET.getUTCFullYear();
+  const month = nowET.getUTCMonth();
+  const day = nowET.getUTCDate();
 
-    if (staleSessions.length > 0) {
-      await db
-        .update(chargingSessionsTable)
-        .set({ status: "expired", checkedOutAt: now })
-        .where(inArray(chargingSessionsTable.id, staleSessions.map((s) => s.id)));
+  // Step 2: determine the DST offset at midnight of that ET date.
+  //   If midnight (04:00 UTC, i.e. EDT) falls inside the DST window → EDT offset.
+  //   Otherwise → EST offset.
+  //   DST start day: midnight = 05:00 UTC (still EST; 2 AM transition is at 07:00 UTC).
+  //   DST end day:   midnight = 04:00 UTC (still EDT; 2 AM transition is at 06:00 UTC).
+  const midnightEDT = new Date(Date.UTC(year, month, day, 4));
+  const isDSTAtMidnight = midnightEDT >= dstStart && midnightEDT < dstEnd;
+  return isDSTAtMidnight ? midnightEDT : new Date(Date.UTC(year, month, day, 5));
+}
 
-      await db
-        .update(chargersTable)
-        .set({ status: "available" })
-        .where(inArray(chargersTable.id, staleSessions.map((s) => s.chargerId)));
+/**
+ * Expires any sessions and queue entries that belong to a previous calendar day
+ * in Eastern time. Covers checked_in, claimed, and assigned sessions — including
+ * admin-placed ones. Chargers are freed and processQueue is triggered so the
+ * next morning starts with a clean slate automatically.
+ *
+ * Runs hourly (and once at startup). Robust against server restarts that miss
+ * the old 11:55 PM window.
+ */
+export async function runOvernightSweep(): Promise<void> {
+  const now = new Date();
+  const startOfTodayET = getStartOfTodayET(now);
 
-      logger.info({ count: staleSessions.length }, "End-of-day session expiry");
-    }
+  // Find any active sessions created before the start of today ET
+  const staleSessions = await db
+    .select()
+    .from(chargingSessionsTable)
+    .where(
+      and(
+        inArray(chargingSessionsTable.status, ["checked_in", "claimed", "assigned"]),
+        lt(chargingSessionsTable.createdAt, startOfTodayET),
+      ),
+    );
 
-    // Cancel any remaining waiting queue entries so they don't carry over
-    const waitingEntries = await db
-      .select()
-      .from(queueEntriesTable)
-      .where(eq(queueEntriesTable.status, "waiting"));
+  if (staleSessions.length > 0) {
+    await db
+      .update(chargingSessionsTable)
+      .set({ status: "expired", checkedOutAt: now })
+      .where(inArray(chargingSessionsTable.id, staleSessions.map((s) => s.id)));
 
-    if (waitingEntries.length > 0) {
-      await db
-        .update(queueEntriesTable)
-        .set({ status: "cancelled" })
-        .where(inArray(queueEntriesTable.id, waitingEntries.map((e) => e.id)));
+    await db
+      .update(chargersTable)
+      .set({ status: "available" })
+      .where(inArray(chargersTable.id, staleSessions.map((s) => s.chargerId)));
 
-      logger.info({ count: waitingEntries.length }, "End-of-day queue clear");
-    }
+    // Also mark any associated queue entries expired
+    await db
+      .update(queueEntriesTable)
+      .set({ status: "cancelled" })
+      .where(inArray(queueEntriesTable.sessionId, staleSessions.map((s) => s.id)));
+
+    logger.info({ count: staleSessions.length, startOfTodayET }, "Overnight sweep: expired stale sessions");
+    await processQueue();
+  }
+
+  // Cancel any waiting queue entries from a previous day
+  const staleQueue = await db
+    .select()
+    .from(queueEntriesTable)
+    .where(
+      and(
+        eq(queueEntriesTable.status, "waiting"),
+        lt(queueEntriesTable.joinedAt, startOfTodayET),
+      ),
+    );
+
+  if (staleQueue.length > 0) {
+    await db
+      .update(queueEntriesTable)
+      .set({ status: "cancelled" })
+      .where(inArray(queueEntriesTable.id, staleQueue.map((e) => e.id)));
+
+    logger.info({ count: staleQueue.length }, "Overnight sweep: cancelled stale queue entries");
   }
 }
 
@@ -184,10 +238,17 @@ export async function seedChargers(): Promise<void> {
 }
 
 export function startBackgroundJobs(): void {
-  // Check for expired claim windows every 2 minutes
+  // Check for expired claim windows every 2 minutes (time-sensitive)
   setInterval(() => {
     runExpiryCheck().catch((err) => logger.error({ err }, "Expiry check failed"));
   }, 2 * 60 * 1000);
+
+  // Sweep for sessions left open from a previous day — run once at startup
+  // then every hour. Robust against server restarts that miss the old midnight window.
+  runOvernightSweep().catch((err) => logger.error({ err }, "Overnight sweep (startup) failed"));
+  setInterval(() => {
+    runOvernightSweep().catch((err) => logger.error({ err }, "Overnight sweep failed"));
+  }, 60 * 60 * 1000);
 
   logger.info("Background jobs started");
 }
