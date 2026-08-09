@@ -1,4 +1,4 @@
-import { eq, and, inArray, asc, lt, sql } from "drizzle-orm";
+import { eq, and, inArray, asc, lt, gt, sql } from "drizzle-orm";
 import { db, chargersTable, queueEntriesTable, chargingSessionsTable } from "@workspace/db";
 import { sendChargerAssignedEmail } from "./email";
 import { logger } from "./logger";
@@ -66,13 +66,66 @@ export async function processQueue(): Promise<void> {
       logger.warn({ err, userId: entry.userId }, "Failed to send assignment email");
     }
 
+    // Schedule a one-shot timer to expire this session if the user doesn't claim in time
+    scheduleClaimExpiry(session.id, claimDeadline);
+
     logger.info({ sessionId: session.id, userId: entry.userId, chargerId: charger.id }, "Charger assigned");
   }
 }
 
 /**
+ * Schedules a one-shot timer that expires a single queue-assigned session when its
+ * claim deadline arrives. Uses a conditional UPDATE so it is safe against races:
+ * if the user claims before the timer fires, the UPDATE matches 0 rows and no-ops.
+ *
+ * Call this immediately after creating an assigned session in processQueue, and
+ * during startup recovery for any sessions still within their claim window.
+ */
+export function scheduleClaimExpiry(sessionId: number, claimDeadlineAt: Date): void {
+  const delay = Math.max(0, claimDeadlineAt.getTime() - Date.now());
+
+  setTimeout(async () => {
+    try {
+      // Conditional UPDATE — only forfeits if still 'assigned' AND past deadline.
+      // If the user claimed between timer creation and now, 0 rows match → no-op.
+      const forfeited = await db
+        .update(chargingSessionsTable)
+        .set({ status: "forfeited" })
+        .where(
+          and(
+            eq(chargingSessionsTable.id, sessionId),
+            eq(chargingSessionsTable.status, "assigned"),
+            lt(chargingSessionsTable.claimDeadlineAt, new Date()),
+          ),
+        )
+        .returning();
+
+      if (forfeited.length > 0) {
+        const session = forfeited[0];
+
+        await db
+          .update(chargersTable)
+          .set({ status: "available" })
+          .where(eq(chargersTable.id, session.chargerId));
+
+        await db
+          .update(queueEntriesTable)
+          .set({ status: "forfeited" })
+          .where(eq(queueEntriesTable.sessionId, sessionId));
+
+        logger.info({ sessionId, chargerId: session.chargerId }, "Claim window expired — charger freed");
+        await processQueue();
+      }
+    } catch (err) {
+      logger.error({ err, sessionId }, "Claim expiry timer failed");
+    }
+  }, delay);
+}
+
+/**
  * Expires sessions where the claim window has passed without claiming.
- * Should be called every 2 minutes — time-sensitive for 60-minute claim windows.
+ * No longer polled on an interval — kept for startup recovery of already-expired
+ * sessions that slipped through before the server restarted.
  */
 export async function runExpiryCheck(): Promise<void> {
   const now = new Date();
@@ -236,10 +289,39 @@ export async function seedChargers(): Promise<void> {
 }
 
 export function startBackgroundJobs(): void {
-  // Check for expired claim windows every 2 minutes (time-sensitive)
-  setInterval(() => {
-    runExpiryCheck().catch((err) => logger.error({ err }, "Expiry check failed"));
-  }, 2 * 60 * 1000);
+  // Startup recovery: schedule timers for any assigned sessions still within their
+  // claim window, and immediately expire any that already missed their deadline.
+  // This replaces the old 2-minute polling interval — the DB is now only queried
+  // at this single startup point and when a new session is created via processQueue.
+  (async () => {
+    try {
+      const now = new Date();
+
+      // Re-arm timers for sessions still within their window
+      const pending = await db
+        .select()
+        .from(chargingSessionsTable)
+        .where(
+          and(
+            eq(chargingSessionsTable.status, "assigned"),
+            gt(chargingSessionsTable.claimDeadlineAt, now),
+          ),
+        );
+
+      for (const session of pending) {
+        scheduleClaimExpiry(session.id, session.claimDeadlineAt);
+      }
+
+      if (pending.length > 0) {
+        logger.info({ count: pending.length }, "Re-armed claim expiry timers after restart");
+      }
+
+      // Immediately expire anything already past its deadline
+      await runExpiryCheck();
+    } catch (err) {
+      logger.error({ err }, "Startup claim recovery failed");
+    }
+  })();
 
   // Sweep for sessions left open from a previous day — run once at startup
   // then every hour. Robust against server restarts that miss the old midnight window.
