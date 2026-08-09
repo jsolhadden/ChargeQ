@@ -152,17 +152,15 @@ export default function Dashboard() {
     }
   };
 
-  // Redirect to /my-spot if user has an active session
-  // Note: 'claimed' DB status is returned as state 'assigned' by the API,
-  // so this redirect covers assigned, claimed, and checked_in sessions.
-  if (myStatus?.state === 'assigned' && myStatus.session?.claimedAt == null) {
+  // Redirect to /my-spot for any active session (assigned queue slot or checked_in).
+  // Direct-tap sessions land in checked_in immediately; queue-assigned start as assigned.
+  if (myStatus?.state === 'assigned' || myStatus?.state === 'checked_in') {
     return <Redirect to="/my-spot" />;
   }
 
   const isLoading = chargersLoading || queueLoading || myStatusLoading || summaryLoading;
   const inQueue = myStatus?.state === 'waiting';
   const isNotInQueue = myStatus?.state === 'not_in_queue';
-  const hasActiveSession = myStatus?.state === 'assigned' || myStatus?.state === 'checked_in';
   const anyChargerAvailable = chargers?.some((c) => c.status === 'available') ?? false;
   const allChargersBusy = !anyChargerAvailable;
   // Show "Join Waitlist" only when every charger is occupied/assigned
@@ -281,10 +279,6 @@ export default function Dashboard() {
                         <> • ~{myStatus.queueEntry.estimatedWaitMinutes}m wait</>
                       )}
                     </p>
-                  ) : hasActiveSession ? (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      You have an active charging session
-                    </p>
                   ) : isNotInQueue && anyChargerAvailable ? (
                     <p className="text-sm text-muted-foreground mt-1">
                       Pick an available charger above ↑
@@ -296,14 +290,6 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div>
-                  {hasActiveSession && (
-                    <Link href="/my-spot">
-                      <Button size="lg" className="font-semibold gap-1.5" data-testid="button-go-to-my-spot">
-                        My Spot
-                        <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    </Link>
-                  )}
                   {canJoinQueue && (
                     <Button
                       onClick={handleJoinQueue}

@@ -77,36 +77,34 @@ export async function processQueue(): Promise<void> {
 export async function runExpiryCheck(): Promise<void> {
   const now = new Date();
 
-  // Forfeit only sessions where status=assigned AND claimDeadlineAt has passed
-  const expiredAssigned = await db
-    .select()
-    .from(chargingSessionsTable)
+  // Single conditional UPDATE — avoids the select-then-update race where a concurrent
+  // claim could land between SELECT and UPDATE, causing a checked_in session to be
+  // overwritten as forfeited. Only sessions still in 'assigned' status are forfeited.
+  const forfeited = await db
+    .update(chargingSessionsTable)
+    .set({ status: "forfeited" })
     .where(
       and(
         eq(chargingSessionsTable.status, "assigned"),
         lt(chargingSessionsTable.claimDeadlineAt, now),
       ),
-    );
+    )
+    .returning();
 
-  if (expiredAssigned.length > 0) {
-    await db
-      .update(chargingSessionsTable)
-      .set({ status: "forfeited" })
-      .where(inArray(chargingSessionsTable.id, expiredAssigned.map((s) => s.id)));
-
-    // Free the chargers
+  if (forfeited.length > 0) {
+    // Free only the chargers that were actually forfeited (not ones already claimed)
     await db
       .update(chargersTable)
       .set({ status: "available" })
-      .where(inArray(chargersTable.id, expiredAssigned.map((s) => s.chargerId)));
+      .where(inArray(chargersTable.id, forfeited.map((s) => s.chargerId)));
 
     // Update associated queue entries to forfeited
     await db
       .update(queueEntriesTable)
       .set({ status: "forfeited" })
-      .where(inArray(queueEntriesTable.sessionId, expiredAssigned.map((s) => s.id)));
+      .where(inArray(queueEntriesTable.sessionId, forfeited.map((s) => s.id)));
 
-    logger.info({ count: expiredAssigned.length }, "Forfeited expired claim sessions");
+    logger.info({ count: forfeited.length }, "Forfeited expired claim sessions");
     await processQueue();
   }
 }

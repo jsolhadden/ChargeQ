@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gt } from "drizzle-orm";
 import { db, chargersTable, queueEntriesTable, chargingSessionsTable } from "@workspace/db";
 import {
   ClaimDirectSessionBody,
@@ -31,7 +31,6 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
   const userId = req.userId!;
 
   const now = new Date();
-  const claimDeadline = new Date(now.getTime() + CLAIM_WINDOW_MINUTES * 60 * 1000);
 
   // Derive userName from the email local-part (e.g. "jhadden" from "jhadden@irobot.com").
   // Prefer session claims; fall back to the Clerk API when the email claim is absent.
@@ -74,7 +73,7 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
       //    If another request raced us, no row is updated and we return 409.
       const updated = await tx
         .update(chargersTable)
-        .set({ status: "assigned" })
+        .set({ status: "occupied" })
         .where(
           and(
             eq(chargersTable.id, body.data.chargerId),
@@ -113,7 +112,8 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
           ),
         );
 
-      // 4. Create the session
+      // 4. Create the session — direct-tap skips assigned/claimed and goes straight to checked_in.
+      //    claimDeadlineAt is required by the schema but irrelevant for direct sessions; use now.
       const [newSession] = await tx
         .insert(chargingSessionsTable)
         .values({
@@ -121,8 +121,10 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
           userName,
           chargerId: charger.id,
           chargerName: charger.name,
-          status: "assigned",
-          claimDeadlineAt: claimDeadline,
+          status: "checked_in",
+          claimDeadlineAt: now,
+          claimedAt: now,
+          checkedInAt: now,
         })
         .returning();
 
@@ -189,16 +191,47 @@ router.post("/sessions/:sessionId/claim", requireAuth, async (req: AuthRequest, 
   }
 
   const now = new Date();
-  if (session.claimDeadlineAt < now) {
+  if (session.claimDeadlineAt && session.claimDeadlineAt < now) {
     res.status(400).json({ error: "Claim window has expired" });
     return;
   }
 
-  const [updated] = await db
-    .update(chargingSessionsTable)
-    .set({ status: "claimed", claimedAt: now })
-    .where(eq(chargingSessionsTable.id, session.id))
-    .returning();
+  // Skip straight to checked_in — no intermediate "claimed" state.
+  // Use a transaction with a conditional update (WHERE status='assigned') so a concurrent
+  // expiry sweep that transitions the session away cannot be overwritten.
+  let updated: typeof chargingSessionsTable.$inferSelect | undefined;
+  try {
+    updated = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(chargingSessionsTable)
+        .set({ status: "checked_in", claimedAt: now, checkedInAt: now })
+        .where(
+          and(
+            eq(chargingSessionsTable.id, session.id),
+            eq(chargingSessionsTable.status, "assigned"),
+            // Deadline guard inside the transaction — if the expiry sweep fired between
+            // our pre-check and now, the row count will be 0 and we return 409.
+            gt(chargingSessionsTable.claimDeadlineAt, now),
+          ),
+        )
+        .returning();
+
+      if (rows.length === 0) {
+        throw Object.assign(new Error("Claim window has expired or session was already processed"), { status: 409 });
+      }
+
+      // Mark charger occupied within the same transaction
+      await tx
+        .update(chargersTable)
+        .set({ status: "occupied" })
+        .where(eq(chargersTable.id, session.chargerId));
+
+      return rows[0];
+    });
+  } catch (err: any) {
+    res.status(err.status ?? 500).json({ error: err.message ?? "Internal server error" });
+    return;
+  }
 
   res.json(ClaimSessionResponse.parse(serializeSession(updated)));
 });

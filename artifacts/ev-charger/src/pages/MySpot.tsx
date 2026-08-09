@@ -6,7 +6,6 @@ import { LogOut, Zap, ArrowLeft, CheckCircle, Clock } from 'lucide-react';
 import {
   useGetMyQueueEntry,
   useClaimSession,
-  useCheckInSession,
   useCheckOutSession,
   useCancelSession,
   getGetMyQueueEntryQueryKey,
@@ -75,27 +74,6 @@ export default function MySpot() {
         queryClient.invalidateQueries({ queryKey: getListQueueQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
         toast({
-          title: 'Charger claimed!',
-          description: 'Head to your assigned spot and check in when ready.',
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: 'Failed to claim',
-          description: error?.message || 'The claim window may have expired',
-          variant: 'destructive',
-        });
-      },
-    },
-  });
-
-  const checkInMutation = useCheckInSession({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetMyQueueEntryQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-        toast({
           title: 'Checked in!',
           description: 'Enjoy your charging session.',
         });
@@ -103,7 +81,7 @@ export default function MySpot() {
       onError: (error: any) => {
         toast({
           title: 'Check-in failed',
-          description: error?.message || 'Please try again',
+          description: error?.message || 'The claim window may have expired',
           variant: 'destructive',
         });
       },
@@ -144,12 +122,6 @@ export default function MySpot() {
     }
   };
 
-  const handleCheckIn = () => {
-    if (myStatus?.session?.id) {
-      checkInMutation.mutate({ sessionId: myStatus.session.id });
-    }
-  };
-
   const handleCheckOut = () => {
     if (myStatus?.session?.id) {
       checkOutMutation.mutate({ sessionId: myStatus.session.id });
@@ -165,16 +137,18 @@ export default function MySpot() {
   const statusConfig = {
     assigned: {
       title: 'Charger Assigned',
-      description: 'Claim your spot within the time limit',
+      description: "Head to your charger and tap below when you're plugged in",
       color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-      action: 'Claim Spot',
+      action: "I'm plugged in",
       showTimer: true,
     },
+    // Legacy: sessions created before the one-tap change may still be in 'claimed' state.
+    // The checkout endpoint already accepts 'claimed', so map it to the check-out action.
     claimed: {
-      title: 'Spot Claimed',
-      description: 'Head to your charger and check in when parked',
-      color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      action: 'Check In',
+      title: 'Charging Active',
+      description: 'Check out when finished to free the spot',
+      color: 'bg-green-500/20 text-green-400 border-green-500/30',
+      action: 'Check Out',
       showTimer: false,
     },
     checked_in: {
@@ -310,7 +284,8 @@ export default function MySpot() {
                         className="w-full font-semibold text-lg h-14"
                         data-testid="button-claim"
                       >
-                        {claimSessionMutation.isPending ? 'Claiming...' : config?.action}
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        {claimSessionMutation.isPending ? 'Checking in...' : config?.action}
                       </Button>
                       <Button
                         onClick={handleCancel}
@@ -325,20 +300,7 @@ export default function MySpot() {
                     </>
                   )}
 
-                  {session?.status === 'claimed' && (
-                    <Button
-                      onClick={handleCheckIn}
-                      disabled={checkInMutation.isPending}
-                      size="lg"
-                      className="w-full font-semibold text-lg h-14"
-                      data-testid="button-checkin"
-                    >
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      {checkInMutation.isPending ? 'Checking in...' : config?.action}
-                    </Button>
-                  )}
-
-                  {session?.status === 'checked_in' && (
+                  {(session?.status === 'checked_in' || session?.status === 'claimed') && (
                     <Button
                       onClick={handleCheckOut}
                       disabled={checkOutMutation.isPending}
