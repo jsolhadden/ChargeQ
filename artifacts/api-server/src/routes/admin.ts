@@ -12,7 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/requireAdmin";
 import type { AuthRequest } from "../middlewares/requireAuth";
-import { processQueue } from "../lib/queue";
+import { processQueue, scheduleQueueNudge } from "../lib/queue";
 import { clerkClient } from "@clerk/express";
 
 const router: IRouter = Router();
@@ -95,6 +95,12 @@ router.post("/admin/chargers/:chargerId/assign", requireAdmin, async (req: AuthR
       .update(queueEntriesTable)
       .set({ status: "cancelled" })
       .where(and(eq(queueEntriesTable.userId, userId), eq(queueEntriesTable.status, "waiting")));
+  }
+
+  // Schedule 3-hour nudge timer. Admin-placed sessions have no userEmail stored,
+  // so sendNudgeForSession will log a warning and skip the email gracefully.
+  if (session.checkedInAt) {
+    scheduleQueueNudge(session.id, session.checkedInAt);
   }
 
   res.json({ success: true, sessionId: session.id });

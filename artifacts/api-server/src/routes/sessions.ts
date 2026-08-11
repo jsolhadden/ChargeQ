@@ -13,7 +13,7 @@ import {
   CancelSessionParams,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/requireAuth";
-import { processQueue } from "../lib/queue";
+import { processQueue, scheduleQueueNudge } from "../lib/queue";
 import { getAuth, clerkClient } from "@clerk/express";
 
 const CLAIM_WINDOW_MINUTES = 60;
@@ -35,9 +35,10 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
   // Derive userName from the email local-part (e.g. "jhadden" from "jhadden@irobot.com").
   // Prefer session claims; fall back to the Clerk API when the email claim is absent.
   let userName = "employee";
+  let userEmail = "";
   try {
     const auth = getAuth(req);
-    let userEmail = (auth as any)?.sessionClaims?.email ?? "";
+    userEmail = (auth as any)?.sessionClaims?.email ?? "";
     if (!userEmail) {
       const clerkUser = await clerkClient.users.getUser(userId);
       userEmail = clerkUser.emailAddresses[0]?.emailAddress ?? "";
@@ -119,6 +120,7 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
         .values({
           userId,
           userName,
+          userEmail,
           chargerId: charger.id,
           chargerName: charger.name,
           status: "checked_in",
@@ -138,6 +140,11 @@ router.post("/sessions/direct", requireAuth, async (req: AuthRequest, res): Prom
 
   // Process queue in case other chargers are still free
   await processQueue();
+
+  // Schedule 3-hour nudge timer for this session
+  if (session.checkedInAt) {
+    scheduleQueueNudge(session.id, session.checkedInAt);
+  }
 
   res.status(201).json(ClaimDirectSessionResponse.parse(serializeSession(session)));
 });
@@ -233,6 +240,11 @@ router.post("/sessions/:sessionId/claim", requireAuth, async (req: AuthRequest, 
     return;
   }
 
+  // Schedule 3-hour nudge timer now that the session is checked_in
+  if (updated.checkedInAt) {
+    scheduleQueueNudge(updated.id, updated.checkedInAt);
+  }
+
   res.json(ClaimSessionResponse.parse(serializeSession(updated)));
 });
 
@@ -281,6 +293,11 @@ router.post("/sessions/:sessionId/checkin", requireAuth, async (req: AuthRequest
     .update(chargersTable)
     .set({ status: "occupied" })
     .where(eq(chargersTable.id, session.chargerId));
+
+  // Schedule 3-hour nudge timer now that the session is checked_in
+  if (updated.checkedInAt) {
+    scheduleQueueNudge(updated.id, updated.checkedInAt);
+  }
 
   res.json(CheckInSessionResponse.parse(serializeSession(updated)));
 });

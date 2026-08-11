@@ -9,8 +9,9 @@ import {
   LeaveQueueResponse,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/requireAuth";
-import { processQueue } from "../lib/queue";
+import { processQueue, nudgeStaleSessions } from "../lib/queue";
 import { getAuth, clerkClient } from "@clerk/express";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -205,6 +206,9 @@ router.post("/queue", requireAuth, async (req: AuthRequest, res): Promise<void> 
 
   // Try to assign immediately if a charger is available
   await processQueue();
+
+  // Send courtesy nudge to any checked-in sessions already past the 3-hour mark
+  nudgeStaleSessions().catch((err) => logger.error({ err }, "Queue-join nudge check failed"));
 
   // Re-fetch to get current state
   const allWaiting = await db

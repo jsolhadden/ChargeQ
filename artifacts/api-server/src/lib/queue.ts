@@ -1,9 +1,10 @@
-import { eq, and, inArray, asc, lt, gt, sql } from "drizzle-orm";
+import { eq, and, inArray, asc, lt, gt, isNull, sql } from "drizzle-orm";
 import { db, chargersTable, queueEntriesTable, chargingSessionsTable } from "@workspace/db";
-import { sendChargerAssignedEmail } from "./email";
+import { sendChargerAssignedEmail, sendQueueNudgeEmail } from "./email";
 import { logger } from "./logger";
 
 const CLAIM_WINDOW_MINUTES = 60;
+const NUDGE_AFTER_HOURS = 3;
 
 /**
  * Tries to assign available chargers to the next people in the queue.
@@ -38,6 +39,7 @@ export async function processQueue(): Promise<void> {
     const [session] = await db.insert(chargingSessionsTable).values({
       userId: entry.userId,
       userName: entry.userName,
+      userEmail: entry.userEmail,
       chargerId: charger.id,
       chargerName: charger.name,
       status: "assigned",
@@ -120,6 +122,109 @@ export function scheduleClaimExpiry(sessionId: number, claimDeadlineAt: Date): v
       logger.error({ err, sessionId }, "Claim expiry timer failed");
     }
   }, delay);
+}
+
+/**
+ * Atomically marks a session as nudged and sends the queue nudge email.
+ * Uses a conditional UPDATE (WHERE nudge_email_sent_at IS NULL AND status=checked_in)
+ * so it is idempotent — safe to call from both the 3-hour timer and the queue-join trigger.
+ * Does NOT check queue size — caller is responsible for ensuring the queue is non-empty.
+ */
+async function sendNudgeForSession(sessionId: number): Promise<void> {
+  const now = new Date();
+  const nudged = await db
+    .update(chargingSessionsTable)
+    .set({ nudgeEmailSentAt: now })
+    .where(
+      and(
+        eq(chargingSessionsTable.id, sessionId),
+        eq(chargingSessionsTable.status, "checked_in"),
+        isNull(chargingSessionsTable.nudgeEmailSentAt),
+      ),
+    )
+    .returning();
+
+  if (nudged.length === 0) return; // already nudged or session has ended
+
+  const session = nudged[0];
+  if (!session.userEmail) {
+    logger.warn({ sessionId }, "Queue nudge: no email address on session, skipping");
+    return;
+  }
+
+  try {
+    await sendQueueNudgeEmail({
+      toEmail: session.userEmail,
+      toName: session.userName,
+      chargerName: session.chargerName,
+    });
+  } catch (err) {
+    logger.warn({ err, sessionId }, "Failed to send queue nudge email");
+  }
+}
+
+/**
+ * Checks if anyone is waiting in the queue, and if so sends a courtesy nudge email
+ * to the given session. Called from the 3-hour timer. If the queue is empty at the
+ * 3-hour mark, nudgeEmailSentAt is left null so the queue-join trigger can fire later.
+ */
+async function checkQueueAndNudge(sessionId: number): Promise<void> {
+  const [waiting] = await db
+    .select()
+    .from(queueEntriesTable)
+    .where(eq(queueEntriesTable.status, "waiting"))
+    .limit(1);
+
+  if (!waiting) {
+    logger.info({ sessionId }, "Queue nudge timer: no one waiting, skipping");
+    return;
+  }
+
+  await sendNudgeForSession(sessionId);
+}
+
+/**
+ * Schedules a one-shot timer that fires 3 hours after checkedInAt. When it fires,
+ * sends a courtesy nudge email if the queue is non-empty. If the queue is empty at
+ * that moment, nudgeEmailSentAt stays null so the queue-join trigger can catch it later.
+ *
+ * Call this whenever a session transitions to checked_in (direct-tap and queue-assigned).
+ */
+export function scheduleQueueNudge(sessionId: number, checkedInAt: Date): void {
+  const nudgeAt = new Date(checkedInAt.getTime() + NUDGE_AFTER_HOURS * 60 * 60 * 1000);
+  const delay = Math.max(0, nudgeAt.getTime() - Date.now());
+
+  setTimeout(async () => {
+    try {
+      await checkQueueAndNudge(sessionId);
+    } catch (err) {
+      logger.error({ err, sessionId }, "Queue nudge timer failed");
+    }
+  }, delay);
+}
+
+/**
+ * Called when a new person joins the queue. Immediately sends nudge emails to any
+ * checked-in sessions that have been charging for 3+ hours but haven't been nudged yet.
+ * Uses the same atomic sendNudgeForSession helper, so no duplicate emails are possible.
+ */
+export async function nudgeStaleSessions(): Promise<void> {
+  const thresholdAt = new Date(Date.now() - NUDGE_AFTER_HOURS * 60 * 60 * 1000);
+
+  const stale = await db
+    .select()
+    .from(chargingSessionsTable)
+    .where(
+      and(
+        eq(chargingSessionsTable.status, "checked_in"),
+        lt(chargingSessionsTable.checkedInAt, thresholdAt),
+        isNull(chargingSessionsTable.nudgeEmailSentAt),
+      ),
+    );
+
+  for (const session of stale) {
+    await sendNudgeForSession(session.id);
+  }
 }
 
 /**
@@ -289,16 +394,14 @@ export async function seedChargers(): Promise<void> {
 }
 
 export function startBackgroundJobs(): void {
-  // Startup recovery: schedule timers for any assigned sessions still within their
-  // claim window, and immediately expire any that already missed their deadline.
-  // This replaces the old 2-minute polling interval — the DB is now only queried
-  // at this single startup point and when a new session is created via processQueue.
+  // Startup recovery: re-arm timers and handle sessions that progressed while server was down.
   (async () => {
     try {
       const now = new Date();
+      const nudgeThreshold = new Date(now.getTime() - NUDGE_AFTER_HOURS * 60 * 60 * 1000);
 
-      // Re-arm timers for sessions still within their window
-      const pending = await db
+      // --- Claim expiry timers ---
+      const pendingAssigned = await db
         .select()
         .from(chargingSessionsTable)
         .where(
@@ -308,18 +411,47 @@ export function startBackgroundJobs(): void {
           ),
         );
 
-      for (const session of pending) {
+      for (const session of pendingAssigned) {
         scheduleClaimExpiry(session.id, session.claimDeadlineAt);
       }
 
-      if (pending.length > 0) {
-        logger.info({ count: pending.length }, "Re-armed claim expiry timers after restart");
+      if (pendingAssigned.length > 0) {
+        logger.info({ count: pendingAssigned.length }, "Re-armed claim expiry timers after restart");
       }
 
       // Immediately expire anything already past its deadline
       await runExpiryCheck();
+
+      // --- Queue nudge timers ---
+      const activeCheckedIn = await db
+        .select()
+        .from(chargingSessionsTable)
+        .where(
+          and(
+            eq(chargingSessionsTable.status, "checked_in"),
+            isNull(chargingSessionsTable.nudgeEmailSentAt),
+          ),
+        );
+
+      let rearmed = 0;
+      for (const session of activeCheckedIn) {
+        if (!session.checkedInAt) continue;
+        const nudgeAt = new Date(session.checkedInAt.getTime() + NUDGE_AFTER_HOURS * 60 * 60 * 1000);
+        if (nudgeAt > now) {
+          // Still within the window — re-arm timer
+          scheduleQueueNudge(session.id, session.checkedInAt);
+          rearmed++;
+        } else {
+          // Already past the 3-hour mark — check queue and send immediately
+          await checkQueueAndNudge(session.id);
+        }
+      }
+
+      if (rearmed > 0) {
+        logger.info({ count: rearmed }, "Re-armed queue nudge timers after restart");
+      }
     } catch (err) {
-      logger.error({ err }, "Startup claim recovery failed");
+      logger.error({ err }, "Startup recovery failed");
     }
   })();
 

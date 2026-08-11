@@ -60,3 +60,40 @@ export async function sendChargerAssignedEmail(params: AssignmentEmailParams): P
 
   logger.info({ toEmail, chargerName }, "Assignment email sent");
 }
+
+interface NudgeEmailParams {
+  toEmail: string;
+  toName: string;
+  chargerName: string;
+}
+
+export async function sendQueueNudgeEmail(params: NudgeEmailParams): Promise<void> {
+  const { toEmail, toName, chargerName } = params;
+
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) {
+    logger.info({ toEmail }, "RESEND_API_KEY not set, skipping nudge email");
+    return;
+  }
+
+  const { Resend } = await import("resend");
+  const resend = new Resend(resendKey);
+
+  const fromAddress = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+
+  await resend.emails.send({
+    from: `EV Charger Waitlist <${fromAddress}>`,
+    to: toEmail,
+    subject: "Someone's waiting to charge at iRobot Bedford",
+    html: `
+      <p>Hi ${toName},</p>
+      <p>Your EV charging session at <strong>${chargerName}</strong> (iRobot Bedford) is active, but there is a queue waiting to charge.</p>
+      <p>Please consider ending your charging session soon to allow others to charge.</p>
+      <p>You can release the charger at any time from the <strong>ChargeQ</strong> app.</p>
+      <br/>
+      <p>— EV Charger Waitlist</p>
+    `,
+  });
+
+  logger.info({ toEmail, chargerName }, "Queue nudge email sent");
+}
