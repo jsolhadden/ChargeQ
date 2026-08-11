@@ -74,7 +74,7 @@ export default function MySpot() {
         queryClient.invalidateQueries({ queryKey: getListQueueQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
         toast({
-          title: 'Checked in!',
+          title: 'Plugged in!',
           description: 'Enjoy your charging session.',
         });
       },
@@ -96,13 +96,13 @@ export default function MySpot() {
         queryClient.invalidateQueries({ queryKey: getListQueueQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
         toast({
-          title: 'Checked out',
+          title: 'Charger released',
           description: 'Thanks for using ChargeQ!',
         });
       },
       onError: (error: any) => {
         toast({
-          title: 'Check-out failed',
+          title: 'Release failed',
           description: error?.message || 'Please try again',
           variant: 'destructive',
         });
@@ -146,16 +146,16 @@ export default function MySpot() {
     // The checkout endpoint already accepts 'claimed', so map it to the check-out action.
     claimed: {
       title: 'Charging Active',
-      description: 'Check out when finished to free the spot',
+      description: 'Release the charger when you\'re done to free the spot for others',
       color: 'bg-green-500/20 text-green-400 border-green-500/30',
-      action: 'Check Out',
+      action: 'Release Charger',
       showTimer: false,
     },
     checked_in: {
       title: 'Charging Active',
-      description: 'Check out when finished to free the spot',
+      description: 'Release the charger when you\'re done to free the spot for others',
       color: 'bg-green-500/20 text-green-400 border-green-500/30',
-      action: 'Check Out',
+      action: 'Release Charger',
       showTimer: false,
     },
   };
@@ -285,7 +285,7 @@ export default function MySpot() {
                         data-testid="button-claim"
                       >
                         <CheckCircle className="w-5 h-5 mr-2" />
-                        {claimSessionMutation.isPending ? 'Checking in...' : config?.action}
+                        {claimSessionMutation.isPending ? 'Plugging in...' : config?.action}
                       </Button>
                       <Button
                         onClick={handleCancel}
@@ -309,7 +309,7 @@ export default function MySpot() {
                       className="w-full font-semibold text-lg h-14"
                       data-testid="button-checkout"
                     >
-                      {checkOutMutation.isPending ? 'Checking out...' : config?.action}
+                      {checkOutMutation.isPending ? 'Releasing...' : config?.action}
                     </Button>
                   )}
                 </div>
@@ -330,7 +330,7 @@ export default function MySpot() {
                     <div>
                       <h3 className="font-semibold text-foreground mb-1">Charging in progress</h3>
                       <p className="text-sm text-muted-foreground">
-                        Remember to check out when you're done to help the next person in queue.
+                        Release the charger when you're done to free the spot for others.
                       </p>
                     </div>
                   </div>

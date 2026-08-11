@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { Show, useClerk, useUser } from '@clerk/react';
 import { useIsAdmin } from '@/hooks/use-is-admin';
-import { LogOut, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
+import { LogOut, Zap, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
 import {
   useListChargers,
   useListQueue,
@@ -12,6 +12,7 @@ import {
   useJoinQueue,
   useLeaveQueue,
   useClaimDirectSession,
+  useCheckOutSession,
   getListChargersQueryKey,
   getListQueueQueryKey,
   getGetMyQueueEntryQueryKey,
@@ -117,11 +118,15 @@ export default function Dashboard() {
   const claimDirectMutation = useClaimDirectSession({
     mutation: {
       onSuccess: () => {
+        const chargerName = chargers?.find((c) => c.id === takingChargerId)?.name ?? 'your charger';
+        setTakingChargerId(null);
         queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyQueueEntryQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-        setTakingChargerId(null);
-        // myStatus will update to 'assigned' → Dashboard redirects to /my-spot automatically
+        toast({
+          title: `You've claimed ${chargerName}!`,
+          description: "Plug in whenever you're ready.",
+        });
       },
       onError: (error: any) => {
         setTakingChargerId(null);
@@ -133,6 +138,28 @@ export default function Dashboard() {
         });
         // Refresh charger list so stale availability clears
         queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
+      },
+    },
+  });
+
+  const checkOutMutation = useCheckOutSession({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListChargersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyQueueEntryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListQueueQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+        toast({
+          title: 'Charger released',
+          description: 'Thanks for using ChargeQ!',
+        });
+      },
+      onError: (error: any) => {
+        toast({
+          title: 'Release failed',
+          description: error?.response?.data?.error || error?.message || 'Please try again',
+          variant: 'destructive',
+        });
       },
     },
   });
@@ -152,11 +179,13 @@ export default function Dashboard() {
     }
   };
 
-  // Redirect to /my-spot for any active session (assigned queue slot or checked_in).
-  // Direct-tap sessions land in checked_in immediately; queue-assigned start as assigned.
-  if (myStatus?.state === 'assigned' || myStatus?.state === 'checked_in') {
+  // Queue-assigned sessions need the /my-spot "I'm plugged in" step — redirect there.
+  // Direct-tap sessions land in checked_in immediately and stay on the Dashboard.
+  if (myStatus?.state === 'assigned') {
     return <Redirect to="/my-spot" />;
   }
+
+  const isCheckedIn = myStatus?.state === 'checked_in';
 
   const isLoading = chargersLoading || queueLoading || myStatusLoading || summaryLoading;
   const inQueue = myStatus?.state === 'waiting';
@@ -165,6 +194,12 @@ export default function Dashboard() {
   const allChargersBusy = !anyChargerAvailable;
   // Show "Join Waitlist" only when every charger is occupied/assigned
   const canJoinQueue = isNotInQueue && allChargersBusy;
+
+  const handleRelease = () => {
+    if (myStatus?.session?.id) {
+      checkOutMutation.mutate({ sessionId: myStatus.session.id });
+    }
+  };
 
   const userInitials = user?.firstName && user?.lastName 
     ? `${user.firstName[0]}${user.lastName[0]}` 
@@ -250,6 +285,35 @@ export default function Dashboard() {
           <div className="space-y-8">
             {/* Stats */}
             {summary && <DashboardStats summary={summary} />}
+
+            {/* Active charging session banner (direct-tap — stays on Dashboard) */}
+            {isCheckedIn && myStatus?.session && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <Card className="p-5 border-green-500/30 bg-green-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-green-500/20 shrink-0">
+                      <CheckCircle className="w-6 h-6 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">Charging at {myStatus.session.chargerName}</p>
+                      <p className="text-sm text-muted-foreground">Release the charger when you're done to free the spot for others.</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleRelease}
+                    disabled={checkOutMutation.isPending}
+                    variant="outline"
+                    className="border-green-500/40 text-green-400 hover:bg-green-500/10 hover:text-green-300 shrink-0"
+                    data-testid="button-release"
+                  >
+                    {checkOutMutation.isPending ? 'Releasing…' : 'Release Charger'}
+                  </Button>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Chargers Grid */}
             <div>
