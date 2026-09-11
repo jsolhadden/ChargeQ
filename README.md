@@ -1,4 +1,4 @@
-ChargeQ — EV Charger Waitlist App
+#ChargeQ — EV Charger Waitlist App
 
 A web app I designed and built to solve a real pain point at our office: queuing up for the limited number of EV charging spaces in the parking lot
 
