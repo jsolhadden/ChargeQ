@@ -16,7 +16,7 @@ ChargeQ is a web app that lets users check into the EV charging spots or join th
 ## Screenshots
 
 ### Home
-![Homescreen](ChargeQ screenshot.jpg)
+![Homescreen](ChargeQ screenshot.jpeg)
 This is the main screen where users can take a charger, release a charger, or join the queue.
 
 ---
