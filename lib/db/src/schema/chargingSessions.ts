@@ -16,6 +16,7 @@ export const chargingSessionsTable = pgTable("charging_sessions", {
   checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
   checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
   nudgeEmailSentAt: timestamp("nudge_email_sent_at", { withTimezone: true }),
+  nudgeEmailSendingStartedAt: timestamp("nudge_email_sending_started_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

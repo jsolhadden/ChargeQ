@@ -62,18 +62,18 @@ export async function sendChargerAssignedEmail(params: AssignmentEmailParams): P
 }
 
 interface NudgeEmailParams {
+  sessionId: number;
   toEmail: string;
   toName: string;
   chargerName: string;
 }
 
 export async function sendQueueNudgeEmail(params: NudgeEmailParams): Promise<void> {
-  const { toEmail, toName, chargerName } = params;
+  const { sessionId, toEmail, toName, chargerName } = params;
 
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) {
-    logger.info({ toEmail }, "RESEND_API_KEY not set, skipping nudge email");
-    return;
+    throw new Error("RESEND_API_KEY is not configured; queue nudge email was not sent");
   }
 
   const { Resend } = await import("resend");
@@ -81,7 +81,15 @@ export async function sendQueueNudgeEmail(params: NudgeEmailParams): Promise<voi
 
   const fromAddress = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
-  await resend.emails.send({
+  if (!process.env.RESEND_FROM_EMAIL) {
+    logger.warn(
+      { sessionId },
+      "RESEND_FROM_EMAIL is not configured; using Resend's default test sender",
+    );
+  }
+
+  const { error } = await resend.emails.send(
+    {
     from: `EV Charger Waitlist <${fromAddress}>`,
     to: toEmail,
     subject: "Someone's waiting to charge at iRobot Bedford",
@@ -93,7 +101,13 @@ export async function sendQueueNudgeEmail(params: NudgeEmailParams): Promise<voi
       <br/>
       <p>— EV Charger Waitlist</p>
     `,
-  });
+    },
+    { idempotencyKey: `chargeq-queue-nudge-${sessionId}` },
+  );
 
-  logger.info({ toEmail, chargerName }, "Queue nudge email sent");
+  if (error) {
+    throw new Error(`Resend rejected queue nudge: ${error.name}: ${error.message}`);
+  }
+
+  logger.info({ sessionId, chargerName }, "Queue nudge email accepted by Resend");
 }

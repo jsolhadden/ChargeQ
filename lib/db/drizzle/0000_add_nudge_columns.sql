@@ -4,3 +4,5 @@
 ALTER TABLE "charging_sessions" ADD COLUMN IF NOT EXISTS "user_email" text NOT NULL DEFAULT '';
 --> statement-breakpoint
 ALTER TABLE "charging_sessions" ADD COLUMN IF NOT EXISTS "nudge_email_sent_at" timestamp with time zone;
+--> statement-breakpoint
+ALTER TABLE "charging_sessions" ADD COLUMN IF NOT EXISTS "nudge_email_sending_started_at" timestamp with time zone;
