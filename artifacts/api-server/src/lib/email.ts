@@ -90,17 +90,17 @@ export async function sendQueueNudgeEmail(params: NudgeEmailParams): Promise<voi
 
   const { error } = await resend.emails.send(
     {
-    from: `EV Charger Waitlist <${fromAddress}>`,
-    to: toEmail,
-    subject: "Someone's waiting to charge at iRobot Bedford",
-    html: `
-      <p>Hi ${toName},</p>
-      <p>Your EV charging session at <strong>${chargerName}</strong> (iRobot Bedford) is active, but there is a queue waiting to charge.</p>
-      <p>Please consider ending your charging session soon to allow others to charge.</p>
-      <p>You can release the charger at any time from the <strong>ChargeQ</strong> app.</p>
-      <br/>
-      <p>— EV Charger Waitlist</p>
-    `,
+      from: `EV Charger Waitlist <${fromAddress}>`,
+      to: toEmail,
+      subject: "Someone's waiting to charge at iRobot Bedford",
+      html: `
+        <p>Hi ${toName},</p>
+        <p>Your EV charging session at <strong>${chargerName}</strong> (iRobot Bedford) is active, but there is a queue waiting to charge.</p>
+        <p>Please consider ending your charging session soon to allow others to charge.</p>
+        <p>You can release the charger at any time from the <strong>ChargeQ</strong> app.</p>
+        <br/>
+        <p>— EV Charger Waitlist</p>
+      `,
     },
     { idempotencyKey: `chargeq-queue-nudge-${sessionId}` },
   );

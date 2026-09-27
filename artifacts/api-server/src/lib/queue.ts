@@ -1,10 +1,14 @@
-import { eq, and, inArray, asc, lt, gt, isNull, sql } from "drizzle-orm";
+import { eq, and, inArray, asc, lt, gt, isNull, or, sql } from "drizzle-orm";
 import { db, chargersTable, queueEntriesTable, chargingSessionsTable } from "@workspace/db";
 import { sendChargerAssignedEmail, sendQueueNudgeEmail } from "./email";
 import { logger } from "./logger";
 
 const CLAIM_WINDOW_MINUTES = 60;
 const NUDGE_AFTER_HOURS = 3;
+const NUDGE_SEND_LEASE_MS = 10 * 60 * 1000;
+const NUDGE_RETRY_DELAY_MS = 15 * 60 * 1000;
+const MAX_NUDGE_RETRIES = 2;
+const scheduledNudgeRetries = new Map<number, ReturnType<typeof setTimeout>>();
 
 /**
  * Tries to assign available chargers to the next people in the queue.
@@ -125,41 +129,111 @@ export function scheduleClaimExpiry(sessionId: number, claimDeadlineAt: Date): v
 }
 
 /**
- * Atomically marks a session as nudged and sends the queue nudge email.
- * Uses a conditional UPDATE (WHERE nudge_email_sent_at IS NULL AND status=checked_in)
- * so it is idempotent — safe to call from both the 3-hour timer and the queue-join trigger.
- * Does NOT check queue size — caller is responsible for ensuring the queue is non-empty.
+ * Reserves the send briefly to prevent concurrent timer/queue-join attempts, then
+ * records nudgeEmailSentAt only after Resend accepts the email. A stale reservation
+ * expires so an interrupted process does not permanently block another attempt.
  */
-async function sendNudgeForSession(sessionId: number): Promise<void> {
-  const now = new Date();
-  const nudged = await db
+async function sendNudgeForSession(
+  sessionId: number,
+): Promise<"sent" | "failed" | "skipped" | "busy"> {
+  const claimedAt = new Date();
+  const staleLeaseBefore = new Date(claimedAt.getTime() - NUDGE_SEND_LEASE_MS);
+  const [session] = await db
     .update(chargingSessionsTable)
-    .set({ nudgeEmailSentAt: now })
+    .set({ nudgeEmailSendingStartedAt: claimedAt })
     .where(
       and(
         eq(chargingSessionsTable.id, sessionId),
         eq(chargingSessionsTable.status, "checked_in"),
         isNull(chargingSessionsTable.nudgeEmailSentAt),
+        or(
+          isNull(chargingSessionsTable.nudgeEmailSendingStartedAt),
+          lt(chargingSessionsTable.nudgeEmailSendingStartedAt, staleLeaseBefore),
+        ),
       ),
     )
     .returning();
 
-  if (nudged.length === 0) return; // already nudged or session has ended
+  if (!session) {
+    const [current] = await db
+      .select({
+        status: chargingSessionsTable.status,
+        nudgeEmailSentAt: chargingSessionsTable.nudgeEmailSentAt,
+      })
+      .from(chargingSessionsTable)
+      .where(eq(chargingSessionsTable.id, sessionId))
+      .limit(1);
 
-  const session = nudged[0];
+    if (current?.status === "checked_in" && !current.nudgeEmailSentAt) return "busy";
+    return "skipped";
+  }
+
   if (!session.userEmail) {
-    logger.warn({ sessionId }, "Queue nudge: no email address on session, skipping");
-    return;
+    await db
+      .update(chargingSessionsTable)
+      .set({ nudgeEmailSendingStartedAt: null })
+      .where(
+        and(
+          eq(chargingSessionsTable.id, sessionId),
+          eq(chargingSessionsTable.nudgeEmailSendingStartedAt, claimedAt),
+        ),
+      );
+    logger.error({ sessionId }, "Queue nudge cannot be sent: session has no saved email address");
+    return "failed";
   }
 
   try {
     await sendQueueNudgeEmail({
+      sessionId,
       toEmail: session.userEmail,
       toName: session.userName,
       chargerName: session.chargerName,
     });
+
+    const [markedSent] = await db
+      .update(chargingSessionsTable)
+      .set({
+        nudgeEmailSentAt: new Date(),
+        nudgeEmailSendingStartedAt: null,
+      })
+      .where(
+        and(
+          eq(chargingSessionsTable.id, sessionId),
+          eq(chargingSessionsTable.nudgeEmailSendingStartedAt, claimedAt),
+          isNull(chargingSessionsTable.nudgeEmailSentAt),
+        ),
+      )
+      .returning({ id: chargingSessionsTable.id });
+
+    if (!markedSent) {
+      logger.error(
+        { sessionId },
+        "Resend accepted queue nudge, but the session could not be marked as sent",
+      );
+      return "failed";
+    }
+
+    const retryTimer = scheduledNudgeRetries.get(sessionId);
+    if (retryTimer) clearTimeout(retryTimer);
+    scheduledNudgeRetries.delete(sessionId);
+    return "sent";
   } catch (err) {
-    logger.warn({ err, sessionId }, "Failed to send queue nudge email");
+    try {
+      await db
+        .update(chargingSessionsTable)
+        .set({ nudgeEmailSendingStartedAt: null })
+        .where(
+          and(
+            eq(chargingSessionsTable.id, sessionId),
+            eq(chargingSessionsTable.nudgeEmailSendingStartedAt, claimedAt),
+          ),
+        );
+    } catch (releaseErr) {
+      logger.error({ err: releaseErr, sessionId }, "Failed to release queue nudge send lock");
+    }
+
+    logger.error({ err, sessionId }, "Queue nudge email delivery attempt failed");
+    return "failed";
   }
 }
 
@@ -168,7 +242,7 @@ async function sendNudgeForSession(sessionId: number): Promise<void> {
  * to the given session. Called from the 3-hour timer. If the queue is empty at the
  * 3-hour mark, nudgeEmailSentAt is left null so the queue-join trigger can fire later.
  */
-async function checkQueueAndNudge(sessionId: number): Promise<void> {
+async function checkQueueAndNudge(sessionId: number, retryAttempt = 0): Promise<void> {
   const [waiting] = await db
     .select()
     .from(queueEntriesTable)
@@ -180,7 +254,25 @@ async function checkQueueAndNudge(sessionId: number): Promise<void> {
     return;
   }
 
-  await sendNudgeForSession(sessionId);
+  const result = await sendNudgeForSession(sessionId);
+  if (
+    (result === "failed" || result === "busy") &&
+    retryAttempt < MAX_NUDGE_RETRIES &&
+    !scheduledNudgeRetries.has(sessionId)
+  ) {
+    const nextAttempt = retryAttempt + 1;
+    const timer = setTimeout(() => {
+      scheduledNudgeRetries.delete(sessionId);
+      checkQueueAndNudge(sessionId, nextAttempt).catch((err) => {
+        logger.error({ err, sessionId, retryAttempt: nextAttempt }, "Queue nudge retry failed");
+      });
+    }, NUDGE_RETRY_DELAY_MS);
+    scheduledNudgeRetries.set(sessionId, timer);
+    logger.warn(
+      { sessionId, retryAttempt: nextAttempt, retryDelayMs: NUDGE_RETRY_DELAY_MS },
+      "Queue nudge retry scheduled after an unsuccessful attempt",
+    );
+  }
 }
 
 /**
@@ -222,9 +314,7 @@ export async function nudgeStaleSessions(): Promise<void> {
       ),
     );
 
-  for (const session of stale) {
-    await sendNudgeForSession(session.id);
-  }
+  for (const session of stale) await checkQueueAndNudge(session.id);
 }
 
 /**
